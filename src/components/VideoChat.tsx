@@ -29,6 +29,7 @@ export default function VideoChat() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const partnerIdRef = useRef<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -65,15 +66,17 @@ export default function VideoChat() {
       setIsConnected(true);
       setTimeLeft(MEETING_DURATION);
       partnerIdRef.current = partnerId;
+      iceCandidateQueueRef.current = [];
 
       // Setup Peer Connection
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnectionRef.current = pc;
 
       // Add local tracks
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          pc.addTrack(track, localStream);
+      const stream = localStreamRef.current;
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
         });
       }
 
@@ -115,6 +118,10 @@ export default function VideoChat() {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        while (iceCandidateQueueRef.current.length > 0) {
+          const candidate = iceCandidateQueueRef.current.shift();
+          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('answer', {
@@ -131,6 +138,10 @@ export default function VideoChat() {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        while (iceCandidateQueueRef.current.length > 0) {
+          const candidate = iceCandidateQueueRef.current.shift();
+          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
       } catch (e) {
         console.error('Error handling answer:', e);
       }
@@ -140,7 +151,11 @@ export default function VideoChat() {
       const pc = peerConnectionRef.current;
       if (!pc) return;
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        if (pc.remoteDescription) {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } else {
+          iceCandidateQueueRef.current.push(data.candidate);
+        }
       } catch (e) {
         console.error('Error adding ICE candidate:', e);
       }
@@ -170,7 +185,21 @@ export default function VideoChat() {
       socket.off('partner-disconnected');
       socket.off('reaction');
     };
-  }, [socket, localStream]);
+  }, [socket]);
+
+  // Handle remote stream attachment
+  useEffect(() => {
+    if (isConnected && remoteStream && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [isConnected, remoteStream]);
+
+  // Handle local stream attachment
+  useEffect(() => {
+    if (localStream && localVideoRef.current && localVideoRef.current.srcObject !== localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
 
   // Timer logic
   useEffect(() => {
@@ -199,6 +228,7 @@ export default function VideoChat() {
       peerConnectionRef.current = null;
     }
     partnerIdRef.current = null;
+    iceCandidateQueueRef.current = [];
   };
 
   const findNextRef = useRef<() => void>(() => {});
