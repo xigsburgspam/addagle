@@ -19,15 +19,15 @@ async function startServer() {
   const PORT = 3000;
 
   // Matchmaking queue
-  let waitingUser: string | null = null;
+  let waitingUser: { socketId: string, peerId: string } | null = null;
   const activeMatches = new Map<string, string>();
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // Join matchmaking queue
-    socket.on('join-queue', () => {
-      console.log('User joined queue:', socket.id);
+    socket.on('join-queue', (peerId: string) => {
+      console.log('User joined queue:', socket.id, 'Peer:', peerId);
       
       // If already in a match, clean it up
       const currentPartner = activeMatches.get(socket.id);
@@ -37,43 +37,21 @@ async function startServer() {
         activeMatches.delete(socket.id);
       }
 
-      if (waitingUser && waitingUser !== socket.id) {
+      if (waitingUser && waitingUser.socketId !== socket.id) {
         // Match found
-        const partnerId = waitingUser;
+        const partner = waitingUser;
         waitingUser = null;
 
-        activeMatches.set(socket.id, partnerId);
-        activeMatches.set(partnerId, socket.id);
+        activeMatches.set(socket.id, partner.socketId);
+        activeMatches.set(partner.socketId, socket.id);
 
         // Notify both users
-        io.to(socket.id).emit('matched', { partnerId, initiator: true });
-        io.to(partnerId).emit('matched', { partnerId: socket.id, initiator: false });
+        io.to(socket.id).emit('matched', { partnerId: partner.socketId, partnerPeerId: partner.peerId, initiator: true });
+        io.to(partner.socketId).emit('matched', { partnerId: socket.id, partnerPeerId: peerId, initiator: false });
       } else {
         // Add to queue
-        waitingUser = socket.id;
+        waitingUser = { socketId: socket.id, peerId };
       }
-    });
-
-    // WebRTC Signaling
-    socket.on('offer', (data) => {
-      io.to(data.target).emit('offer', {
-        sdp: data.sdp,
-        sender: socket.id,
-      });
-    });
-
-    socket.on('answer', (data) => {
-      io.to(data.target).emit('answer', {
-        sdp: data.sdp,
-        sender: socket.id,
-      });
-    });
-
-    socket.on('ice-candidate', (data) => {
-      io.to(data.target).emit('ice-candidate', {
-        candidate: data.candidate,
-        sender: socket.id,
-      });
     });
 
     // Reactions
@@ -92,7 +70,7 @@ async function startServer() {
         activeMatches.delete(partnerId);
         activeMatches.delete(socket.id);
       }
-      if (waitingUser === socket.id) {
+      if (waitingUser?.socketId === socket.id) {
         waitingUser = null;
       }
     });
@@ -100,7 +78,7 @@ async function startServer() {
     // Disconnect
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
-      if (waitingUser === socket.id) {
+      if (waitingUser?.socketId === socket.id) {
         waitingUser = null;
       }
       const partnerId = activeMatches.get(socket.id);

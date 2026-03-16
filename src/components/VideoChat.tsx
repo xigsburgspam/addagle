@@ -2,28 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ],
-};
+import Peer, { MediaConnection } from 'peerjs';
 
 const MEETING_DURATION = 15; // seconds
 
@@ -43,8 +22,8 @@ export default function VideoChat() {
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
+  const peerRef = useRef<Peer | null>(null);
+  const currentCallRef = useRef<MediaConnection | null>(null);
   const partnerIdRef = useRef<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -52,6 +31,25 @@ export default function VideoChat() {
     // Initialize Socket
     const newSocket = io();
     setSocket(newSocket);
+
+    // Initialize PeerJS
+    const peer = new Peer();
+    peerRef.current = peer;
+
+    peer.on('open', (id) => {
+      console.log('My peer ID is: ' + id);
+    });
+
+    peer.on('call', (call) => {
+      console.log('Receiving call');
+      currentCallRef.current = call;
+      call.answer(localStreamRef.current || undefined);
+      
+      call.on('stream', (remoteStream) => {
+        console.log('Received remote stream from call');
+        setRemoteStream(remoteStream);
+      });
+    });
 
     // Fetch online users periodically
     const fetchUsers = async () => {
@@ -75,110 +73,23 @@ export default function VideoChat() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('matched', async ({ partnerId, initiator }) => {
-      console.log('Matched with:', partnerId, 'Initiator:', initiator);
+    socket.on('matched', async ({ partnerId, partnerPeerId, initiator }) => {
+      console.log('Matched with:', partnerId, 'Peer:', partnerPeerId, 'Initiator:', initiator);
       setIsSearching(false);
       setIsConnected(true);
       setTimeLeft(MEETING_DURATION);
       partnerIdRef.current = partnerId;
-      iceCandidateQueueRef.current = [];
 
-      // Setup Peer Connection
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      peerConnectionRef.current = pc;
-
-      // Add local tracks
-      const stream = localStreamRef.current;
-      if (stream) {
-        stream.getTracks().forEach(track => {
-          pc.addTrack(track, stream);
-        });
-      }
-
-      // Handle remote tracks
-      const newRemoteStream = new MediaStream();
-      setRemoteStream(newRemoteStream);
-      
-      pc.ontrack = (event) => {
-        console.log('Received remote track:', event.track.kind);
-        newRemoteStream.addTrack(event.track);
-        if (remoteVideoRef.current) {
-          if (remoteVideoRef.current.srcObject !== newRemoteStream) {
-            remoteVideoRef.current.srcObject = newRemoteStream;
-          }
-          remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
-        }
-      };
-
-      // Handle ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('ice-candidate', {
-            target: partnerId,
-            candidate: event.candidate,
+      if (initiator && localStreamRef.current) {
+        console.log('Calling partner:', partnerPeerId);
+        const call = peerRef.current?.call(partnerPeerId, localStreamRef.current);
+        if (call) {
+          currentCallRef.current = call;
+          call.on('stream', (remoteStream) => {
+            console.log('Received remote stream from initiator');
+            setRemoteStream(remoteStream);
           });
         }
-      };
-
-      if (initiator) {
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', {
-            target: partnerId,
-            sdp: pc.localDescription,
-          });
-        } catch (e) {
-          console.error('Error creating offer:', e);
-        }
-      }
-    });
-
-    socket.on('offer', async (data) => {
-      const pc = peerConnectionRef.current;
-      if (!pc) return;
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        while (iceCandidateQueueRef.current.length > 0) {
-          const candidate = iceCandidateQueueRef.current.shift();
-          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('answer', {
-          target: data.sender,
-          sdp: pc.localDescription,
-        });
-      } catch (e) {
-        console.error('Error handling offer:', e);
-      }
-    });
-
-    socket.on('answer', async (data) => {
-      const pc = peerConnectionRef.current;
-      if (!pc) return;
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        while (iceCandidateQueueRef.current.length > 0) {
-          const candidate = iceCandidateQueueRef.current.shift();
-          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-      } catch (e) {
-        console.error('Error handling answer:', e);
-      }
-    });
-
-    socket.on('ice-candidate', async (data) => {
-      const pc = peerConnectionRef.current;
-      if (!pc) return;
-      try {
-        if (pc.remoteDescription) {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } else {
-          iceCandidateQueueRef.current.push(data.candidate);
-        }
-      } catch (e) {
-        console.error('Error adding ICE candidate:', e);
       }
     });
 
@@ -199,9 +110,6 @@ export default function VideoChat() {
 
     return () => {
       socket.off('matched');
-      socket.off('offer');
-      socket.off('answer');
-      socket.off('ice-candidate');
       socket.off('partner-skipped');
       socket.off('partner-disconnected');
       socket.off('reaction');
@@ -247,12 +155,11 @@ export default function VideoChat() {
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+    if (currentCallRef.current) {
+      currentCallRef.current.close();
+      currentCallRef.current = null;
     }
     partnerIdRef.current = null;
-    iceCandidateQueueRef.current = [];
   };
 
   const findNextRef = useRef<() => void>(() => {});
@@ -277,7 +184,13 @@ export default function VideoChat() {
     }
 
     setIsSearching(true);
-    socket.emit('join-queue');
+    if (peerRef.current && peerRef.current.id) {
+      socket.emit('join-queue', peerRef.current.id);
+    } else {
+      peerRef.current?.once('open', (id) => {
+        socket.emit('join-queue', id);
+      });
+    }
   };
 
   useEffect(() => {
