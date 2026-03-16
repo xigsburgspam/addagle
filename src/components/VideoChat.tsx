@@ -7,6 +7,21 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
   ],
 };
 
@@ -81,11 +96,17 @@ export default function VideoChat() {
       }
 
       // Handle remote tracks
+      const newRemoteStream = new MediaStream();
+      setRemoteStream(newRemoteStream);
+      
       pc.ontrack = (event) => {
-        console.log('Received remote track');
-        setRemoteStream(event.streams[0]);
+        console.log('Received remote track:', event.track.kind);
+        newRemoteStream.addTrack(event.track);
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+          if (remoteVideoRef.current.srcObject !== newRemoteStream) {
+            remoteVideoRef.current.srcObject = newRemoteStream;
+          }
+          remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
         }
       };
 
@@ -190,7 +211,10 @@ export default function VideoChat() {
   // Handle remote stream attachment
   useEffect(() => {
     if (isConnected && remoteStream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = remoteStream;
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
     }
   }, [isConnected, remoteStream]);
 
