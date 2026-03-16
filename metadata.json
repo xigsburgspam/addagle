@@ -1,0 +1,8 @@
+{
+  "name": "BlinkMeet",
+  "description": "A minimal random video meeting web app.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
