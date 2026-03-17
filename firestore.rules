@@ -86,9 +86,11 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read: if isAdmin();
       allow create: if isAuthenticated() && isNotBlocked() && isValidReport(request.resource.data);
+      allow delete: if isAdmin();
     }
+
     match /blocked_emails/{email} {
-      allow read: if isAuthenticated() && request.auth.token.email == email;
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == email);
       allow write: if isAdmin();
     }
   }
