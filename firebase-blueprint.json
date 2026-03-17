@@ -27,6 +27,28 @@
         "roomId": { "type": "string" }
       },
       "required": ["reporterId", "reportedId", "reason", "timestamp"]
+    },
+    "Stats": {
+      "title": "Stats",
+      "description": "Global application statistics",
+      "type": "object",
+      "properties": {
+        "onlineUsers": { "type": "integer" },
+        "videoChatting": { "type": "integer" },
+        "textChatting": { "type": "integer" },
+        "totalChats": { "type": "integer" },
+        "totalVideoChats": { "type": "integer" }
+      }
+    },
+    "Presence": {
+      "title": "Presence",
+      "description": "User presence and activity status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "status": { "type": "string", "enum": ["online", "video", "text"] },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -37,6 +59,14 @@
     "/reports/{reportId}": {
       "schema": "Report",
       "description": "Moderation reports"
+    },
+    "/stats/global": {
+      "schema": "Stats",
+      "description": "Global statistics"
+    },
+    "/presence/{userId}": {
+      "schema": "Presence",
+      "description": "User presence tracking"
     }
   }
 }

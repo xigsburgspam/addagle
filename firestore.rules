@@ -96,5 +96,15 @@ service cloud.firestore {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == email);
       allow write: if isAdmin();
     }
+
+    match /stats/global {
+      allow read: if true;
+      allow update: if isAuthenticated() && isNotBlocked();
+    }
+
+    match /presence/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId) && isNotBlocked();
+    }
   }
 }

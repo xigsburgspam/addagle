@@ -91,8 +91,8 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => 
               
               <div className={`max-w-[90%] px-3 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium leading-relaxed border ${
                 msg.sender === currentUserId 
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 rounded-tr-none' 
-                  : 'bg-neutral-900/50 text-neutral-300 border-neutral-800 rounded-tl-none'
+                  ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 border-emerald-500/20 rounded-tr-none' 
+                  : 'bg-gradient-to-br from-neutral-900/80 to-neutral-900/40 text-neutral-300 border-neutral-800 rounded-tl-none'
               }`}>
                 {msg.text}
               </div>
@@ -123,7 +123,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => 
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="p-2 sm:p-3 bg-emerald-500 text-black rounded-lg sm:rounded-xl hover:bg-emerald-400 disabled:opacity-20 disabled:hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/10"
+              className="p-2 sm:p-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-lg sm:rounded-xl hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-20 disabled:hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/10"
             >
               <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>

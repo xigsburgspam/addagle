@@ -18,18 +18,27 @@ async function startServer() {
   });
   const PORT = 3000;
 
-  // Matchmaking queue
-  let waitingUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
+  // Matchmaking queues
+  let waitingVideoUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
+  let waitingTextUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
+  
   const activeMatches = new Map<string, string>();
-  const rooms = new Map<string, { users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
+  const userModes = new Map<string, 'video' | 'text'>();
+  const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
+
+  // Historical stats (in-memory for now, could be persisted to Firestore)
+  let totalVideoChats = 0;
+  let totalTextChats = 0;
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // Join matchmaking queue
-    socket.on('join-queue', ({ peerId, uid, email, isAdmin }: { peerId: string, uid: string, email: string, isAdmin: boolean }) => {
-      console.log('User joined queue:', socket.id, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
+    socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
+      console.log('User joined queue:', socket.id, 'Mode:', mode, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
       
+      userModes.set(socket.id, mode);
+
       // If already in a match, clean it up
       const currentPartner = activeMatches.get(socket.id);
       if (currentPartner) {
@@ -38,10 +47,14 @@ async function startServer() {
         activeMatches.delete(socket.id);
       }
 
+      const isVideo = mode === 'video';
+      let waitingUser = isVideo ? waitingVideoUser : waitingTextUser;
+
       if (waitingUser && waitingUser.socketId !== socket.id) {
         // Match found
         const partner = waitingUser;
-        waitingUser = null;
+        if (isVideo) waitingVideoUser = null;
+        else waitingTextUser = null;
 
         const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
         activeMatches.set(socket.id, partner.socketId);
@@ -59,10 +72,14 @@ async function startServer() {
         metadataMap.set(partner.socketId, { uid: partner.uid, email: partner.email, isAdmin: partner.isAdmin });
 
         rooms.set(roomId, { 
+          type: mode,
           users: [socket.id, partner.socketId], 
           peerIds: peerIdsMap,
           metadata: metadataMap
         });
+
+        if (isVideo) totalVideoChats++;
+        else totalTextChats++;
 
         // Notify both users
         io.to(socket.id).emit('matched', { 
@@ -85,7 +102,8 @@ async function startServer() {
         });
       } else {
         // Add to queue
-        waitingUser = { socketId: socket.id, peerId, uid, email, isAdmin };
+        if (isVideo) waitingVideoUser = { socketId: socket.id, peerId, uid, email, isAdmin };
+        else waitingTextUser = { socketId: socket.id, peerId, uid, email, isAdmin };
       }
     });
 
@@ -125,17 +143,18 @@ async function startServer() {
           }
         }
       }
-      if (waitingUser?.socketId === socket.id) {
-        waitingUser = null;
-      }
+      if (waitingVideoUser?.socketId === socket.id) waitingVideoUser = null;
+      if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
     });
 
     // Disconnect
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
-      if (waitingUser?.socketId === socket.id) {
-        waitingUser = null;
-      }
+      if (waitingVideoUser?.socketId === socket.id) waitingVideoUser = null;
+      if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
+      
+      userModes.delete(socket.id);
+
       const partnerId = activeMatches.get(socket.id);
       if (partnerId) {
         io.to(partnerId).emit('partner-disconnected');
@@ -157,8 +176,17 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
-  app.get('/api/users-online', (req, res) => {
-    res.json({ count: io.engine.clientsCount });
+  app.get('/api/stats', (req, res) => {
+    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2;
+    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2;
+    
+    res.json({ 
+      onlineUsers: io.engine.clientsCount,
+      videoChatting,
+      textChatting,
+      totalVideoChats,
+      totalTextChats
+    });
   });
 
   app.get('/api/active-rooms', (req, res) => {

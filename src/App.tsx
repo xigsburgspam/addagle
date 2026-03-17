@@ -15,6 +15,12 @@ const AppContent: React.FC = () => {
   const { user, userData, loading } = useFirebase();
   const { t } = useLanguage();
   const [isChatting, setIsChatting] = useState(false);
+  const [chatMode, setChatMode] = useState<'video' | 'text'>('video');
+
+  const startChat = (mode: 'video' | 'text') => {
+    setChatMode(mode);
+    setIsChatting(true);
+  };
 
   if (loading) {
     return (
@@ -53,9 +59,9 @@ const AppContent: React.FC = () => {
             element={
               <>
                 {isChatting && user && !userData?.isBlocked ? (
-                  <VideoChat onExit={() => setIsChatting(false)} />
+                  <VideoChat mode={chatMode} onExit={() => setIsChatting(false)} />
                 ) : (
-                  <HomePage onStart={() => setIsChatting(true)} />
+                  <HomePage onStart={startChat} />
                 )}
                 <CookieConsent />
               </>

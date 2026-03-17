@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
+import { useLanguage } from '../LanguageContext';
 import { db, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, Timestamp } from '../firebase';
 import { Shield, UserX, MessageSquare, ExternalLink, Activity, Terminal, ShieldAlert, Users, Globe, Lock, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -31,6 +32,7 @@ interface BlockedEmail {
 
 export const AdminPanel: React.FC = () => {
   const { isAdmin } = useFirebase();
+  const { t } = useLanguage();
   const [reports, setReports] = useState<Report[]>([]);
   const [blockedEmails, setBlockedEmails] = useState<BlockedEmail[]>([]);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
@@ -164,11 +166,11 @@ export const AdminPanel: React.FC = () => {
       <header className="flex items-center justify-between px-10 py-6 border-b border-neutral-900 bg-neutral-950 z-30">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <Shield className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tighter italic uppercase leading-none">Mission Control</h1>
+              <h1 className="text-2xl font-black tracking-widest uppercase leading-none font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.appName} Control</h1>
               <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">Gupto Protocol v2.5</p>
             </div>
           </div>

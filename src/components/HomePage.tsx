@@ -1,16 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, Users, Video, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 
-export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
+export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> = ({ onStart }) => {
   const { user, userData, loading } = useFirebase();
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
+  const [stats, setStats] = useState({
+    onlineUsers: 0,
+    videoChatting: 0,
+    textChatting: 0,
+    totalVideoChats: 0,
+    totalTextChats: 0
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/stats');
+        if (res.ok) {
+          const data = await res.json();
+          setStats(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch stats:', e);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogin = async () => {
     try {
@@ -31,10 +56,10 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
       {/* Header with Language Switcher */}
       <header className="fixed top-0 left-0 right-0 z-50 p-6 flex justify-between items-center bg-gradient-to-b from-neutral-950 to-transparent">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
             <Ghost className="w-6 h-6 text-white" />
           </div>
-          <span className="text-2xl font-black tracking-tighter italic uppercase font-brand">{t.appName}</span>
+          <span className="text-2xl font-black tracking-widest uppercase font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.appName}</span>
         </div>
 
         <div className="flex items-center gap-4">
@@ -75,10 +100,10 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
               Next-Gen Video Protocol
             </div>
             
-            <h1 className="text-7xl lg:text-[120px] font-black tracking-tighter leading-[0.85] mb-10 uppercase italic">
+            <h1 className="text-7xl lg:text-[120px] font-black tracking-tighter leading-[0.85] mb-10 uppercase italic bg-gradient-to-br from-white via-white to-neutral-600 bg-clip-text text-transparent">
               {t.tagline.split(' ').map((word, i) => (
                 <React.Fragment key={i}>
-                  {word === 'Strangers' || word === 'অপরিচিতদের' ? <span className="text-emerald-500">{word}</span> : word}
+                  {word === 'Strangers' || word === 'অপরিচিতদের' ? <span className="text-emerald-500 bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{word}</span> : word}
                   {i === 1 && <br />}
                   {' '}
                 </React.Fragment>
@@ -96,13 +121,22 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
                     {t.accessRevoked}
                   </div>
                 ) : (
-                  <button 
-                    onClick={onStart}
-                    className="group relative bg-white text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:bg-emerald-500 hover:text-white transition-all duration-500 shadow-2xl shadow-white/5 w-full sm:w-auto"
-                  >
-                    {t.startEncounter}
-                    <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => onStart('video')}
+                      className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto"
+                    >
+                      {t.startEncounter}
+                      <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />
+                    </button>
+                    <button 
+                      onClick={() => onStart('text')}
+                      className="group relative bg-neutral-900 border border-neutral-800 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:border-emerald-500/50 hover:bg-gradient-to-r hover:from-neutral-900 hover:to-neutral-800 transition-all duration-500 w-full sm:w-auto"
+                    >
+                      {t.startTextChat}
+                      <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
+                    </button>
+                  </>
                 )
               ) : (
                 <button 
@@ -120,18 +154,41 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
               )}
             </div>
 
-            <div className="mt-16 flex items-center gap-8 text-neutral-600">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Global Node</span>
+            <div className="mt-16 grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-8">
+              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
+                <div className="flex items-center gap-2 text-emerald-500">
+                  <Users className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{t.onlineUsers}</span>
+                </div>
+                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.onlineUsers}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest">End-to-End</span>
+              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
+                <div className="flex items-center gap-2 text-emerald-500">
+                  <Video className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{t.videoChatting}</span>
+                </div>
+                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.videoChatting}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <UserCheck className="w-4 h-4" />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Verified Only</span>
+              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
+                <div className="flex items-center gap-2 text-emerald-500">
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{t.textChatting}</span>
+                </div>
+                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.textChatting}</span>
+              </div>
+              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
+                <div className="flex items-center gap-2 text-neutral-600">
+                  <Zap className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{t.totalVideoChats}</span>
+                </div>
+                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalVideoChats}</span>
+              </div>
+              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
+                <div className="flex items-center gap-2 text-neutral-600">
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">{t.totalChats}</span>
+                </div>
+                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalTextChats}</span>
               </div>
             </div>
           </motion.div>
@@ -186,15 +243,15 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
           </div>
           
           <div className="grid md:grid-cols-12 gap-6">
-            <div className="md:col-span-8 p-12 rounded-[40px] bg-neutral-900/30 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
+            <div className="md:col-span-8 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Shield className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">{t.activeModeration}</h3>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.activeModeration}</h3>
               <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">
                 {t.activeModerationDesc}
               </p>
             </div>
             
-            <div className="md:col-span-4 p-12 rounded-[40px] bg-emerald-500 text-black group overflow-hidden relative">
+            <div className="md:col-span-4 p-12 rounded-[40px] bg-gradient-to-br from-emerald-500 to-emerald-600 text-black group overflow-hidden relative">
               <Zap className="w-12 h-12 mb-8 group-hover:scale-110 transition-transform" />
               <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">{t.instantMatch}</h3>
               <p className="text-black/70 text-lg leading-relaxed font-bold">
@@ -205,17 +262,17 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
               </div>
             </div>
 
-            <div className="md:col-span-4 p-12 rounded-[40px] bg-neutral-900/30 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
+            <div className="md:col-span-4 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <MessageSquare className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter italic">{t.zeroHistory}</h3>
+              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter italic bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.zeroHistory}</h3>
               <p className="text-neutral-400 leading-relaxed">
                 {t.zeroHistoryDesc}
               </p>
             </div>
 
-            <div className="md:col-span-8 p-12 rounded-[40px] bg-neutral-900/30 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
+            <div className="md:col-span-8 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Ghost className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">{t.visualVerification}</h3>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.visualVerification}</h3>
               <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">
                 {t.visualVerificationDesc}
               </p>
@@ -228,10 +285,10 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
       <footer className="relative z-10 py-20 border-t border-neutral-900 bg-neutral-950">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
               <Ghost className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-black tracking-tighter italic uppercase font-brand">{t.appName}</span>
+            <span className="text-2xl font-black tracking-widest uppercase font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.appName}</span>
           </div>
           <p className="text-neutral-600 text-xs font-bold uppercase tracking-[0.3em]">
             {t.copyright}

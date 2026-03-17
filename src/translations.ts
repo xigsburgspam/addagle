@@ -62,13 +62,21 @@ export const translations = {
     adminEducation: 'Currently studying Aeronautical Engineering (Avionics) at Aviation and Aerospace University, Bangladesh',
     adminFacebook: 'Connect to Facebook',
     adminRole: 'Admin',
-    close: 'Close'
+    close: 'Close',
+    startTextChat: 'Start Text Chat',
+    onlineUsers: 'Online Users',
+    videoChatting: 'Video Chatting',
+    textChatting: 'Text Chatting',
+    totalChats: 'Total Chats Done',
+    totalVideoChats: 'Total Video Chats Done',
+    anonymousChat: 'Anonymous Chat',
+    anonymousChatDesc: 'Text-only anonymous chat. No history, no logs, pure anonymity.'
   },
   bn: {
     appName: 'গুপ্ত',
     tagline: 'অজানার সাথে আড্ডা, একদম নিরাপদে।',
     description: 'গুপ্ত একটি প্রিমিয়াম ভিডিও চ্যাট প্ল্যাটফর্ম যেখানে আপনি পাবেন একদম রিয়েল মানুষ। কোনো বট বা স্প্যামের জায়গা এখানে নেই। আড্ডা হবে মন খুলে।',
-    startEncounter: 'আড্ডা শুরু করি',
+    startEncounter: 'ভিডিও চ্যাট শুরু করি',
     joinWithGoogle: 'গুগল দিয়ে লগইন',
     accessRevoked: 'অ্যাক্সেস বন্ধ: নিয়ম ভঙ্গ করেছেন',
     protocol: 'সিকিউরিটি প্রটোকল',
@@ -125,6 +133,14 @@ export const translations = {
     adminEducation: 'বর্তমানে এভিয়েশন অ্যান্ড অ্যারোস্পেস ইউনিভার্সিটি, বাংলাদেশে অ্যারোনটিক্যাল ইঞ্জিনিয়ারিং (অ্যাভিওনিক্স) নিয়ে পড়ছেন',
     adminFacebook: 'ফেসবুকে যুক্ত হন',
     adminRole: 'অ্যাডমিন',
-    close: 'বন্ধ করুন'
+    close: 'বন্ধ করুন',
+    startTextChat: 'টেক্সট চ্যাট শুরু করি',
+    onlineUsers: 'অনলাইন ইউজার',
+    videoChatting: 'ভিডিও চ্যাট হচ্ছে',
+    textChatting: 'টেক্সট চ্যাট হচ্ছে',
+    totalChats: 'মোট চ্যাট হয়েছে',
+    totalVideoChats: 'মোট ভিডিও চ্যাট হয়েছে',
+    anonymousChat: 'বেনামী চ্যাট',
+    anonymousChatDesc: 'শুধুমাত্র টেক্সট চ্যাট। কোনো হিস্ট্রি নেই, কোনো লগ নেই, একদম বেনামী।'
   }
 };

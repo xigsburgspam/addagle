@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users, PhoneOff, Flag, ShieldAlert, Terminal, Radio, Activity, X, AlertTriangle, Ghost } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users, PhoneOff, Flag, ShieldAlert, Terminal, Radio, Activity, X, AlertTriangle, Ghost, MessageSquare, ArrowRight, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Peer, { MediaConnection } from 'peerjs';
 import Draggable from 'react-draggable';
@@ -12,9 +12,10 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHand
 
 interface VideoChatProps {
   onExit: () => void;
+  mode: 'video' | 'text';
 }
 
-export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
+export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const { user, userData } = useFirebase();
   const { t } = useLanguage();
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -24,7 +25,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [onlineCount, setOnlineCount] = useState(0);
+  const [stats, setStats] = useState({
+    onlineUsers: 0,
+    videoChatting: 0,
+    textChatting: 0,
+    totalVideoChats: 0,
+    totalTextChats: 0
+  });
   const [reaction, setReaction] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isAdminConnected, setIsAdminConnected] = useState(false);
@@ -102,12 +109,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       });
     });
 
-    const fetchUsers = async () => {
+    const fetchStats = async () => {
       try {
-        const res = await fetch('/api/users-online');
+        const res = await fetch('/api/stats');
         if (res.ok) {
           const data = await res.json();
-          setOnlineCount(data.count);
+          setStats(data);
         }
       } catch (e) {}
     };
@@ -116,9 +123,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       setOrientation(window.innerHeight > window.innerWidth ? 'portrait' : 'landscape');
     };
 
-    fetchUsers();
+    fetchStats();
     window.addEventListener('resize', handleResize);
-    const interval = setInterval(fetchUsers, 5000);
+    const interval = setInterval(fetchStats, 5000);
 
     // Initial start
     // Don't call findNext automatically, wait for user to click "Connect" in intro
@@ -189,6 +196,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   }, [socket]);
 
   useEffect(() => {
+    if (mode === 'text') return;
     if (!videoEnabled && (isConnected || isSearching)) {
       handleDisconnect('Camera required');
       setIsSearching(false);
@@ -221,25 +229,28 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
 
   const findNextRef = useRef<() => void>(() => {});
   const findNext = async () => {
-    if (!socket || !videoEnabled) return;
+    if (!socket) return;
+    if (mode === 'video' && !videoEnabled) return;
     
-    let stream = localStreamRef.current;
-    if (!stream) {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
-          }, 
-          audio: true 
-        });
-        setLocalStream(stream);
-        localStreamRef.current = stream;
-      } catch (err) {
-        alert(t.cameraRequired);
-        onExit();
-        return;
+    if (mode === 'video') {
+      let stream = localStreamRef.current;
+      if (!stream) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              width: { ideal: 1280 }, 
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            }, 
+            audio: true 
+          });
+          setLocalStream(stream);
+          localStreamRef.current = stream;
+        } catch (err) {
+          alert(t.cameraRequired);
+          onExit();
+          return;
+        }
       }
     }
 
@@ -250,14 +261,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         peerId: peerRef.current.id, 
         uid: user?.uid, 
         email: user?.email,
-        isAdmin
+        isAdmin,
+        mode
       });
     } else {
       peerRef.current?.once('open', (id) => socket.emit('join-queue', { 
         peerId: id, 
         uid: user?.uid, 
         email: user?.email,
-        isAdmin
+        isAdmin,
+        mode
       }));
     }
   };
@@ -472,8 +485,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
               <Ghost className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div className="hidden xs:block">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tighter italic uppercase leading-none font-brand">{t.appName}</h1>
-              <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">Video Protocol v2.5</p>
+              <h1 className="text-xl sm:text-2xl font-black tracking-widest uppercase leading-none font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">{t.appName}</h1>
+              <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">{mode === 'video' ? 'Video Protocol v2.5' : 'Anonymous Text v1.0'}</p>
             </div>
           </div>
           
@@ -483,12 +496,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
             <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
               <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-500" />
               <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-400">Live</span>
-              <span className="text-[8px] sm:text-[10px] font-mono text-emerald-500">{onlineCount.toString().padStart(4, '0')}</span>
+              <span className="text-[8px] sm:text-[10px] font-mono text-emerald-500">{stats.onlineUsers.toString().padStart(4, '0')}</span>
             </div>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
-              <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Signal</span>
-              <span className="text-[10px] font-mono text-emerald-500">98%</span>
+              <Users className="w-3 h-3 text-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">{mode === 'video' ? t.videoChatting : t.textChatting}</span>
+              <span className="text-[10px] font-mono text-emerald-500">{mode === 'video' ? stats.videoChatting : stats.textChatting}</span>
             </div>
           </div>
         </div>
@@ -509,168 +522,254 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-neutral-950">
         
         {/* Video Section */}
-        <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
-          
-          <div className={`relative w-full h-full max-w-6xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 ${
-            orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'
-          }`}>
+        {mode === 'video' ? (
+          <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
             
-            {/* Background Grid for Empty State */}
-            <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-                 style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+            <div className={`relative w-full h-full max-w-6xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 ${
+              orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'
+            }`}>
+              
+              {/* Background Grid for Empty State */}
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+                   style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
 
-            {/* Remote Video */}
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
-            />
+              {/* Remote Video */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
+              />
 
-            {/* Admin Connection Notification */}
-            <AnimatePresence>
-              {isAdminConnected && (
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="absolute top-4 left-1/2 -translate-x-1/2 z-40"
-                >
-                  <div className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-black rounded-full shadow-2xl border border-emerald-400/50">
-                    <ShieldAlert className="w-5 h-5 animate-pulse" />
-                    <span className="text-xs font-black uppercase tracking-widest italic">Connected to Admin</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            
-            {!isConnected && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
-                {isSearching ? (
-                  <div className="flex flex-col items-center gap-6 sm:gap-8">
-                    <div className="relative">
-                      <motion.div 
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                        className="w-24 h-24 sm:w-32 sm:h-32 border-2 border-dashed border-emerald-500/30 rounded-full" 
-                      />
-                      <div className="absolute inset-0 m-auto w-16 h-16 sm:w-24 sm:h-24 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin" />
-                      <Video className="absolute inset-0 m-auto w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
+              {/* Admin Connection Notification */}
+              <AnimatePresence>
+                {isAdminConnected && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="absolute top-4 left-1/2 -translate-x-1/2 z-40"
+                  >
+                    <div className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-black rounded-full shadow-2xl border border-emerald-400/50">
+                      <ShieldAlert className="w-5 h-5 animate-pulse" />
+                      <span className="text-xs font-black uppercase tracking-widest italic">Connected to Admin</span>
                     </div>
-                    <div className="text-center">
-                      <p className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] text-emerald-500 italic mb-2">{t.searching}</p>
-                      <p className="text-[8px] sm:text-[10px] font-bold text-neutral-600 uppercase tracking-[0.4em]">{t.scanning}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-4 sm:gap-6">
-                    <div className="w-16 h-16 sm:w-24 sm:h-24 bg-neutral-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border border-neutral-700">
-                      <VideoOff className="w-8 h-8 sm:w-12 sm:h-12 text-neutral-600" />
-                    </div>
-                    <p className="text-xs sm:text-sm font-black uppercase tracking-[0.3em] text-neutral-600">{t.protocolStandby}</p>
-                  </div>
+                  </motion.div>
                 )}
-              </div>
-            )}
-
-            {/* Local Video (Technical PiP) - Movable */}
-            <Draggable nodeRef={draggableRef} bounds="parent">
-              <div 
-                ref={draggableRef}
-                className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden shadow-2xl border-2 border-neutral-800 z-50 group cursor-move"
-              >
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
-                />
-                {!videoEnabled && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-                    <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
-                  </div>
-                )}
-                
-                {/* Technical Overlay for Local Video */}
-                <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-3xl" />
-                <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-2">
-                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[6px] sm:text-[8px] font-bold uppercase tracking-widest text-emerald-500">Local Node</span>
+              </AnimatePresence>
+              
+              {!isConnected && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+                  {isSearching ? (
+                    <div className="flex flex-col items-center gap-6 sm:gap-8">
+                      <div className="relative">
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                          className="w-24 h-24 sm:w-32 sm:h-32 border-2 border-dashed border-emerald-500/30 rounded-full" 
+                        />
+                        <div className="absolute inset-0 m-auto w-16 h-16 sm:w-24 sm:h-24 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin" />
+                        <Video className="absolute inset-0 m-auto w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] text-emerald-500 italic mb-2">{t.searching}</p>
+                        <p className="text-[8px] sm:text-[10px] font-bold text-neutral-600 uppercase tracking-[0.4em]">{t.scanning}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-4 sm:gap-6">
+                      <div className="w-16 h-16 sm:w-24 sm:h-24 bg-neutral-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border border-neutral-700">
+                        <VideoOff className="w-8 h-8 sm:w-12 sm:h-12 text-neutral-600" />
+                      </div>
+                      <p className="text-xs sm:text-sm font-black uppercase tracking-[0.3em] text-neutral-600">{t.protocolStandby}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </Draggable>
-
-            {/* Reaction Overlay */}
-            <AnimatePresence>
-              {reaction && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.5, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 1.5, y: -50 }}
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
-                >
-                  <span className="text-[6rem] sm:text-[12rem] drop-shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-                    {reaction === 'like' && '👍'}
-                    {reaction === 'wave' && '👋'}
-                    {reaction === 'laugh' && '😂'}
-                  </span>
-                </motion.div>
               )}
-            </AnimatePresence>
 
-            {/* Hardware-style Report Button */}
-            {isConnected && (
+              {/* Local Video (Technical PiP) - Movable */}
+              <Draggable nodeRef={draggableRef} bounds="parent">
+                <div 
+                  ref={draggableRef}
+                  className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden border-2 border-neutral-800 z-50 group cursor-move"
+                >
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
+                  />
+                  {!videoEnabled && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
+                      <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
+                    </div>
+                  )}
+                  
+                  {/* Technical Overlay for Local Video */}
+                  <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-3xl" />
+                  <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-2">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[6px] sm:text-[8px] font-bold uppercase tracking-widest text-emerald-500">Local Node</span>
+                  </div>
+                </div>
+              </Draggable>
+
+              {/* Reaction Overlay */}
+              <AnimatePresence>
+                {reaction && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 1.5, y: -50 }}
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+                  >
+                    <span className="text-[6rem] sm:text-[12rem] drop-shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+                      {reaction === 'like' && '👍'}
+                      {reaction === 'wave' && '👋'}
+                      {reaction === 'laugh' && '😂'}
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Hardware-style Report Button */}
+              {isConnected && (
+                <button
+                  onClick={() => setShowReportModal(true)}
+                  className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl sm:rounded-2xl transition-all border border-red-500/20 group z-20 shadow-2xl"
+                >
+                  <Flag className="w-4 h-4 sm:w-6 sm:h-6" />
+                  <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest italic">{t.reportViolation}</span>
+                </button>
+              )}
+
+              {/* Corner Accents */}
+              <div className="absolute top-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-l-2 border-emerald-500/30 rounded-tl-2xl sm:rounded-tl-[40px] pointer-events-none" />
+              <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-r-2 border-emerald-500/30 rounded-tr-2xl sm:rounded-tr-[40px] pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-l-2 border-emerald-500/30 rounded-bl-2xl sm:rounded-bl-[40px] pointer-events-none" />
+              <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
+            </div>
+
+            {/* Controls Bar - Hardware Style */}
+            <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4">
               <button
-                onClick={() => setShowReportModal(true)}
-                className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl sm:rounded-2xl transition-all border border-red-500/20 group z-20 shadow-2xl"
+                onClick={handleNext}
+                disabled={!isConnected && !isSearching}
+                className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter italic overflow-hidden"
               >
-                <Flag className="w-4 h-4 sm:w-6 sm:h-6" />
-                <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest italic">{t.reportViolation}</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                {t.nextNode}
+                <SkipForward className="w-4 h-4 sm:w-6 sm:h-6 md:w-7 md:h-7 group-hover:translate-x-2 transition-transform duration-500" />
               </button>
-            )}
 
-            {/* Corner Accents */}
-            <div className="absolute top-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-l-2 border-emerald-500/30 rounded-tl-2xl sm:rounded-tl-[40px] pointer-events-none" />
-            <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-r-2 border-emerald-500/30 rounded-tr-2xl sm:rounded-tr-[40px] pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-l-2 border-emerald-500/30 rounded-bl-2xl sm:rounded-bl-[40px] pointer-events-none" />
-            <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
-          </div>
-
-          {/* Controls Bar - Hardware Style */}
-          <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4">
-            <button
-              onClick={handleNext}
-              disabled={!isConnected && !isSearching}
-              className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter italic overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-              {t.nextNode}
-              <SkipForward className="w-4 h-4 sm:w-6 sm:h-6 md:w-7 md:h-7 group-hover:translate-x-2 transition-transform duration-500" />
-            </button>
-
-            <div className="flex items-center gap-1 sm:gap-2 md:gap-3 bg-neutral-900 p-1 sm:p-2 md:p-3 rounded-xl sm:rounded-2xl md:rounded-3xl border border-neutral-800 shadow-2xl">
-              <button onClick={toggleAudio} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                {audioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
-              </button>
-              <button onClick={() => sendReaction('like')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                <ThumbsUp className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
-              </button>
-              <button onClick={() => sendReaction('wave')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                <Hand className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
-              </button>
-              <button onClick={() => sendReaction('laugh')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                <Smile className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
-              </button>
+              <div className="flex items-center gap-1 sm:gap-2 md:gap-3 bg-neutral-900 p-1 sm:p-2 md:p-3 rounded-xl sm:rounded-2xl md:rounded-3xl border border-neutral-800 shadow-2xl">
+                <button onClick={toggleAudio} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
+                  {audioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
+                </button>
+                <button onClick={() => sendReaction('like')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
+                  <ThumbsUp className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
+                </button>
+                <button onClick={() => sendReaction('wave')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
+                  <Hand className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
+                </button>
+                <button onClick={() => sendReaction('laugh')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
+                  <Smile className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
+            <div className="relative w-full h-full max-w-4xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 flex flex-col items-center justify-center text-center p-8">
+               <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+                   style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+              
+              {!isConnected && (
+                <AnimatePresence mode="wait">
+                  {isSearching ? (
+                    <motion.div
+                      key="searching-text"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 1.1 }}
+                      className="flex flex-col items-center"
+                    >
+                      <div className="relative mb-8">
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                          className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-2 border-emerald-500/20 border-t-emerald-500"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
+                        </div>
+                      </div>
+                      <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase italic mb-4">{t.scanning}</h2>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">{t.searching}</span>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="standby-text"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex flex-col items-center"
+                    >
+                      <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-neutral-800 flex items-center justify-center mb-8 border border-neutral-700">
+                        <Ghost className="w-10 h-10 sm:w-12 sm:h-12 text-neutral-600" />
+                      </div>
+                      <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase italic mb-4 text-neutral-500">{t.anonymousChat}</h2>
+                      <p className="text-neutral-600 mb-8 max-w-xs">{t.anonymousChatDesc}</p>
+                      <button 
+                        onClick={findNext}
+                        className="group relative px-10 sm:px-12 py-4 sm:py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-2xl font-black text-lg sm:text-xl uppercase tracking-tighter italic flex items-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all shadow-2xl shadow-emerald-500/20"
+                      >
+                        {t.startTextChat}
+                        <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform" />
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
 
+              {isConnected && (
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4 border border-emerald-500/20">
+                    <UserCheck className="w-10 h-10 text-emerald-500" />
+                  </div>
+                  <h2 className="text-2xl font-black tracking-tighter uppercase italic text-emerald-500 mb-2">Secure Link Active</h2>
+                  <p className="text-neutral-500 text-xs uppercase tracking-widest font-bold">Remote Node Connected</p>
+                  
+                  <div className="mt-8 flex gap-4">
+                    <button 
+                      onClick={handleNext}
+                      className="flex items-center gap-2 px-8 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                    >
+                      <SkipForward className="w-4 h-4" />
+                      {t.nextNode}
+                    </button>
+                    <button 
+                      onClick={() => setShowReportModal(true)}
+                      className="p-3 bg-neutral-800 hover:bg-red-500 text-white rounded-xl transition-all"
+                    >
+                      <Flag className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
         {/* Chat Section - Technical Sidebar */}
         <div className={`
           flex flex-col
-          w-full lg:w-[450px] h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
+          ${mode === 'video' ? 'w-full lg:w-[450px]' : 'w-full lg:w-[500px]'} h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
           transition-all duration-500
+          ${mode === 'video' && !showChat ? 'hidden lg:flex' : ''}
         `}>
           <div className="h-full w-full flex flex-col">
             <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
@@ -699,6 +798,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
             </div>
           </div>
         </div>
+
       </main>
     </div>
   );

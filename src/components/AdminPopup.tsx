@@ -43,7 +43,7 @@ export const AdminPopup: React.FC<AdminPopupProps> = ({ isOpen, onClose }) => {
                   <ShieldCheck className="w-6 h-6 text-emerald-500" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black uppercase tracking-tighter italic text-white">{t.adminInfo}</h2>
+                  <h2 className="text-xl font-black uppercase tracking-widest font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.adminInfo}</h2>
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-emerald-500/60">Authorized Access</span>
@@ -118,7 +118,7 @@ export const AdminPopup: React.FC<AdminPopupProps> = ({ isOpen, onClose }) => {
             <div className="p-8 pt-0">
               <button
                 onClick={onClose}
-                className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20"
+                className="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20"
               >
                 {t.close}
               </button>
