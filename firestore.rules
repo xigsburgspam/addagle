@@ -25,6 +25,12 @@ service cloud.firestore {
     //   - timestamp: timestamp (required)
     //   - roomId: string
     //
+    // Collection: blocked_emails
+    // Document ID: {email}
+    // Fields:
+    //   - blockedAt: timestamp
+    //   - reason: string
+    //
     // ===============================================================
 
     // ===============================================================
@@ -77,6 +83,10 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read: if isAdmin();
       allow create: if isAuthenticated() && isNotBlocked() && isValidReport(request.resource.data);
+    }
+    match /blocked_emails/{email} {
+      allow read: if isAuthenticated() && request.auth.token.email == email;
+      allow write: if isAdmin();
     }
   }
 }

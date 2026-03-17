@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
-import { db, collection, onSnapshot, query, orderBy, doc, updateDoc } from '../firebase';
+import { db, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc } from '../firebase';
 import { Shield, UserX, MessageSquare, ExternalLink, Activity, Terminal, ShieldAlert, Users, Globe, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -8,7 +8,9 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHand
 interface Report {
   id: string;
   reporterId: string;
+  reporterEmail?: string;
   reportedId: string;
+  reportedEmail?: string;
   reason: string;
   timestamp: any;
   roomId?: string;
@@ -58,10 +60,17 @@ export const AdminPanel: React.FC = () => {
     };
   }, [isAdmin]);
 
-  const blockUser = async (userId: string) => {
+  const blockUser = async (userId: string, email?: string) => {
     if (!confirm('Are you sure you want to block this user forever?')) return;
     try {
       await updateDoc(doc(db, 'users', userId), { isBlocked: true });
+      if (email) {
+        await setDoc(doc(db, 'blocked_emails', email), {
+          blockedAt: new Date(),
+          reason: 'Admin Blocked',
+          uid: userId
+        });
+      }
       alert('User blocked successfully.');
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
@@ -214,11 +223,11 @@ export const AdminPanel: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reported Entity</p>
-                          <p className="text-xl font-mono text-emerald-500">{report.reportedId}</p>
+                          <p className="text-xl font-mono text-emerald-500">{report.reportedEmail || report.reportedId}</p>
                         </div>
                       </div>
                       <button
-                        onClick={() => blockUser(report.reportedId)}
+                        onClick={() => blockUser(report.reportedId, report.reportedEmail)}
                         className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all shadow-xl shadow-red-600/20"
                       >
                         <UserX className="w-4 h-4" />
@@ -234,7 +243,7 @@ export const AdminPanel: React.FC = () => {
                       <div className="flex gap-8">
                         <div>
                           <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
-                          <p className="text-[10px] font-mono text-neutral-400">{report.reporterId}</p>
+                          <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
                         </div>
                         <div>
                           <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>

@@ -5,6 +5,8 @@ import { AdminPanel } from './components/AdminPanel';
 import { HomePage } from './components/HomePage';
 import { FirebaseProvider, useFirebase } from './FirebaseContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ShieldAlert } from 'lucide-react';
+import { auth } from './firebase';
 
 const AppContent: React.FC = () => {
   const { user, userData, loading } = useFirebase();
@@ -14,6 +16,26 @@ const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (userData?.isBlocked) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-neutral-900 border border-red-500/20 p-8 rounded-[40px] text-center shadow-2xl">
+          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <ShieldAlert className="w-10 h-10 text-red-500" />
+          </div>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic mb-4">Access Revoked</h1>
+          <p className="text-neutral-400 font-medium mb-8">Your account has been permanently suspended for violating our community guidelines. This action is final.</p>
+          <button 
+            onClick={() => auth.signOut()}
+            className="w-full py-4 bg-neutral-800 hover:bg-neutral-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all"
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
     );
   }

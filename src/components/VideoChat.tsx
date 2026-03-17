@@ -37,6 +37,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   const peerRef = useRef<Peer | null>(null);
   const currentCallRef = useRef<MediaConnection | null>(null);
   const partnerIdRef = useRef<string | null>(null);
+  const partnerUidRef = useRef<string | null>(null);
+  const partnerEmailRef = useRef<string | null>(null);
 
   useEffect(() => {
     const newSocket = io();
@@ -47,23 +49,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          { urls: 'stun:stun.voiparound.com' },
-          { urls: 'stun:stun.voipbuster.com' },
-          { urls: 'stun:stun.voipstunt.com' },
-          { urls: 'stun:stun.voxgratia.org' },
           {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089091968',
+            credential: 'RMGzeBVkbqAMUd3DD+dKHoiFy4o='
           }
         ],
         iceCandidatePoolSize: 10,
@@ -142,11 +131,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('matched', async ({ partnerId, partnerPeerId, initiator, roomId: rId }) => {
+    socket.on('matched', async ({ partnerId, partnerPeerId, partnerUid, partnerEmail, initiator, roomId: rId }) => {
       setIsSearching(false);
       setIsConnected(true);
       setRoomId(rId);
       partnerIdRef.current = partnerId;
+      partnerUidRef.current = partnerUid;
+      partnerEmailRef.current = partnerEmail;
 
       if (initiator && localStreamRef.current) {
         const call = peerRef.current?.call(partnerPeerId, localStreamRef.current);
@@ -235,9 +226,17 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
 
     setIsSearching(true);
     if (peerRef.current?.id) {
-      socket.emit('join-queue', peerRef.current.id);
+      socket.emit('join-queue', { 
+        peerId: peerRef.current.id, 
+        uid: user?.uid, 
+        email: user?.email 
+      });
     } else {
-      peerRef.current?.once('open', (id) => socket.emit('join-queue', id));
+      peerRef.current?.once('open', (id) => socket.emit('join-queue', { 
+        peerId: id, 
+        uid: user?.uid, 
+        email: user?.email 
+      }));
     }
   };
   findNextRef.current = findNext;
@@ -283,7 +282,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
     try {
       await addDoc(collection(db, 'reports'), {
         reporterId: user.uid,
-        reportedId: partnerIdRef.current,
+        reporterEmail: user.email,
+        reportedId: partnerUidRef.current,
+        reportedEmail: partnerEmailRef.current,
         reason: '18+ Content / Inappropriate Behavior',
         timestamp: Timestamp.now(),
         roomId: roomId
@@ -401,9 +402,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         <div className="flex items-center gap-2 sm:gap-4">
           <button 
             onClick={() => setShowChat(!showChat)}
-            className={`lg:hidden p-2.5 rounded-xl border transition-all ${showChat ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-neutral-900 text-neutral-400 border-neutral-800'}`}
+            className={`lg:hidden flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${showChat ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-neutral-900 text-neutral-400 border-neutral-800'}`}
           >
             <Smile className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Chat</span>
           </button>
           <button 
             onClick={handleDrop}
@@ -420,9 +422,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-neutral-950">
         
         {/* Video Section */}
-        <div className="flex-1 relative flex flex-col items-center justify-center p-4 sm:p-8">
+        <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8">
           
-          <div className="relative w-full h-full max-w-6xl aspect-video bg-neutral-900 rounded-2xl sm:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800">
+          <div className="relative w-full h-full max-w-6xl aspect-video bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800">
             
             {/* Background Grid for Empty State */}
             <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
@@ -505,9 +507,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                 <button onClick={toggleAudio} className="p-2 sm:p-3 bg-neutral-900 border border-neutral-800 rounded-xl sm:rounded-2xl hover:bg-neutral-800 transition-colors">
                   {audioEnabled ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />}
                 </button>
-                <button onClick={toggleVideo} className="p-2 sm:p-3 bg-neutral-900 border border-neutral-800 rounded-xl sm:rounded-2xl hover:bg-neutral-800 transition-colors">
-                  {videoEnabled ? <Video className="w-4 h-4 sm:w-5 sm:h-5" /> : <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />}
-                </button>
               </div>
             </div>
 
@@ -548,18 +547,18 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
           </div>
 
           {/* Controls Bar - Hardware Style */}
-          <div className="mt-6 sm:mt-10 flex items-center gap-4 sm:gap-6 z-30">
+          <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4">
             <button
               onClick={handleNext}
               disabled={!isConnected && !isSearching}
-              className="group relative flex items-center gap-2 sm:gap-4 px-8 sm:px-12 py-3 sm:py-5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl sm:rounded-3xl font-black text-lg sm:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter italic overflow-hidden"
+              className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter italic overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
               Next Node
-              <SkipForward className="w-5 h-5 sm:w-7 sm:h-7 group-hover:translate-x-2 transition-transform duration-500" />
+              <SkipForward className="w-4 h-4 sm:w-6 sm:h-6 md:w-7 md:h-7 group-hover:translate-x-2 transition-transform duration-500" />
             </button>
 
-            <div className="flex items-center gap-1 sm:gap-3 bg-neutral-900 p-1.5 sm:p-3 rounded-2xl sm:rounded-3xl border border-neutral-800 shadow-2xl">
+            <div className="flex items-center gap-1 sm:gap-2 md:gap-3 bg-neutral-900 p-1 sm:p-2 md:p-3 rounded-xl sm:rounded-2xl md:rounded-3xl border border-neutral-800 shadow-2xl">
               <button onClick={() => sendReaction('like')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
                 <ThumbsUp className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
               </button>

@@ -10,6 +10,7 @@ interface UserData {
   photoURL: string;
   role: 'admin' | 'user';
   isBlocked: boolean;
+  isEmailBlocked?: boolean;
 }
 
 interface FirebaseContextType {
@@ -40,11 +41,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         
-        const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
+        const unsubDoc = onSnapshot(userDocRef, async (docSnap) => {
+          let currentData: UserData;
           if (docSnap.exists()) {
-            setUserData(docSnap.data() as UserData);
+            currentData = docSnap.data() as UserData;
           } else {
-            const newData: UserData = {
+            currentData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
               displayName: firebaseUser.displayName || '',
@@ -52,9 +54,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               role: firebaseUser.email === 'edublitz71@gmail.com' ? 'admin' : 'user',
               isBlocked: false,
             };
-            setDoc(userDocRef, newData).catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${firebaseUser.uid}`));
-            setUserData(newData);
+            await setDoc(userDocRef, currentData).catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${firebaseUser.uid}`));
           }
+
+          // Check if email is blocked
+          if (firebaseUser.email) {
+            const emailBlockRef = doc(db, 'blocked_emails', firebaseUser.email);
+            const emailBlockSnap = await getDoc(emailBlockRef);
+            if (emailBlockSnap.exists()) {
+              currentData.isEmailBlocked = true;
+              currentData.isBlocked = true; // Force block if email is blocked
+            }
+          }
+
+          setUserData(currentData);
           setLoading(false);
         }, (error) => {
           handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);

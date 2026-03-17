@@ -19,16 +19,16 @@ async function startServer() {
   const PORT = 3000;
 
   // Matchmaking queue
-  let waitingUser: { socketId: string, peerId: string } | null = null;
+  let waitingUser: { socketId: string, peerId: string, uid: string, email: string } | null = null;
   const activeMatches = new Map<string, string>();
-  const rooms = new Map<string, { users: string[], peerIds: Map<string, string> }>();
+  const rooms = new Map<string, { users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string }> }>();
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // Join matchmaking queue
-    socket.on('join-queue', (peerId: string) => {
-      console.log('User joined queue:', socket.id, 'Peer:', peerId);
+    socket.on('join-queue', ({ peerId, uid, email }: { peerId: string, uid: string, email: string }) => {
+      console.log('User joined queue:', socket.id, 'Peer:', peerId, 'UID:', uid);
       
       // If already in a match, clean it up
       const currentPartner = activeMatches.get(socket.id);
@@ -53,14 +53,37 @@ async function startServer() {
         const peerIdsMap = new Map();
         peerIdsMap.set(socket.id, peerId);
         peerIdsMap.set(partner.socketId, partner.peerId);
-        rooms.set(roomId, { users: [socket.id, partner.socketId], peerIds: peerIdsMap });
+        
+        const metadataMap = new Map();
+        metadataMap.set(socket.id, { uid, email });
+        metadataMap.set(partner.socketId, { uid: partner.uid, email: partner.email });
+
+        rooms.set(roomId, { 
+          users: [socket.id, partner.socketId], 
+          peerIds: peerIdsMap,
+          metadata: metadataMap
+        });
 
         // Notify both users
-        io.to(socket.id).emit('matched', { partnerId: partner.socketId, partnerPeerId: partner.peerId, initiator: true, roomId });
-        io.to(partner.socketId).emit('matched', { partnerId: socket.id, partnerPeerId: peerId, initiator: false, roomId });
+        io.to(socket.id).emit('matched', { 
+          partnerId: partner.socketId, 
+          partnerPeerId: partner.peerId, 
+          partnerUid: partner.uid,
+          partnerEmail: partner.email,
+          initiator: true, 
+          roomId 
+        });
+        io.to(partner.socketId).emit('matched', { 
+          partnerId: socket.id, 
+          partnerPeerId: peerId, 
+          partnerUid: uid,
+          partnerEmail: email,
+          initiator: false, 
+          roomId 
+        });
       } else {
         // Add to queue
-        waitingUser = { socketId: socket.id, peerId };
+        waitingUser = { socketId: socket.id, peerId, uid, email };
       }
     });
 
@@ -146,7 +169,8 @@ async function startServer() {
     const activeRooms = Array.from(rooms.entries()).map(([id, data]) => ({
       id,
       users: data.users,
-      peerIds: Object.fromEntries(data.peerIds)
+      peerIds: Object.fromEntries(data.peerIds),
+      metadata: Object.fromEntries(data.metadata)
     }));
     res.json(activeRooms);
   });
