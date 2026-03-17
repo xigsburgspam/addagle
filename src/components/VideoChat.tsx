@@ -41,18 +41,12 @@ export default function VideoChat() {
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
           { urls: 'stun:stun.services.mozilla.com' },
-          { urls: 'stun:stun.voiparound.com' },
-          { urls: 'stun:stun.schlund.de' },
-          { urls: 'stun:stun.voipstunt.com' },
-          { urls: 'stun:stun.ekiga.net' },
-          { urls: 'stun:stun.ideasip.com' },
-          { urls: 'stun:stun.iptel.org' },
-          { urls: 'stun:stun.rixtelecom.se' },
-          { urls: 'stun:stun.softjoys.com' },
-          { urls: 'stun:stun.stunprotocol.org' },
+          {
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089091968',
+            credential: 'RMGzeBVkbqAMUd3DD+dKHoiFy4o='
+          },
           {
             urls: 'turn:openrelay.metered.ca:80',
             username: 'openrelayproject',
@@ -81,10 +75,11 @@ export default function VideoChat() {
 
     peer.on('error', (err) => {
       console.error('PeerJS error:', err.type, err);
+      const errorType = err.type as string;
       // If negotiation fails or peer is unavailable, try to find someone else
-      if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'disconnected' || err.type === 'negotiation-failed') {
+      if (['peer-unavailable', 'network', 'disconnected', 'negotiation-failed', 'webrtc'].includes(errorType)) {
         console.log('Connection failed, searching for next partner...');
-        handleDisconnect('Connection error: ' + err.type);
+        handleDisconnect('Connection error: ' + errorType);
         // Add a small delay before searching again to avoid rapid loops
         setTimeout(() => {
           findNextRef.current();
@@ -112,10 +107,14 @@ export default function VideoChat() {
     const fetchUsers = async () => {
       try {
         const res = await fetch('/api/users-online');
+        if (!res.ok) throw new Error('Failed to fetch online users');
         const data = await res.json();
         setOnlineCount(data.count);
       } catch (e) {
-        console.error(e);
+        // Only log if it's not a common network error during disconnect/refresh
+        if (e instanceof Error && e.name !== 'TypeError') {
+          console.error('Error fetching online users:', e);
+        }
       }
     };
     fetchUsers();
