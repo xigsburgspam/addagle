@@ -138,30 +138,42 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
 
       {/* Input Area */}
       <form onSubmit={sendMessage} className="p-4 sm:p-6 bg-neutral-950 border-t border-neutral-900">
+        {isPartnerTyping && (
+          <div className="text-[8px] sm:text-[10px] font-mono text-emerald-500/60 mb-2 animate-pulse">
+            Remote node is typing...
+          </div>
+        )}
         <div className="relative group">
           <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 to-transparent rounded-xl sm:rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-          <div className="relative flex items-center gap-2 sm:gap-3 bg-neutral-900 border border-neutral-800 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 focus-within:border-emerald-500/50 transition-colors">
-            <input
-              type="text"
+          <div className="relative flex items-end gap-2 sm:gap-3 bg-neutral-900 border border-neutral-800 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 focus-within:border-emerald-500/50 transition-colors">
+            <textarea
               value={inputText}
-              onChange={handleInputChange}
+              onChange={(e) => {
+                handleInputChange(e as any);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(e as any);
+                  e.currentTarget.style.height = 'auto';
+                }
+              }}
               placeholder="Transmit..."
-              className="flex-1 bg-transparent text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium focus:outline-none placeholder:text-neutral-700"
+              className="flex-1 bg-transparent text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium focus:outline-none placeholder:text-neutral-700 resize-none overflow-y-auto"
+              rows={1}
+              style={{ maxHeight: '100px' }}
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="p-2 sm:p-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-lg sm:rounded-xl hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-20 disabled:hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/10"
+              className="p-2 sm:p-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-lg sm:rounded-xl hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-20 disabled:hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/10 self-end"
             >
               <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
-        {isPartnerTyping && (
-          <div className="text-[8px] sm:text-[10px] font-mono text-emerald-500/60 mt-2 animate-pulse">
-            Remote node is typing...
-          </div>
-        )}
         <div className="mt-3 sm:mt-4 flex items-center justify-between px-1 sm:px-2">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />

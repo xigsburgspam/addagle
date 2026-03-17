@@ -570,8 +570,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
           <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-0">
             {/* Main Video Container Margin */}
             <div 
-              className="relative w-full aspect-square bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 my-4 sm:my-8 md:my-16"
-              style={{ maxWidth: 'min(56rem, calc(100vh - 24rem))' }}
+              className="relative w-full h-full bg-neutral-900 overflow-hidden"
             >
               
               {/* Background Grid for Empty State */}
@@ -675,7 +674,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               {isConnected && (
                 <button
                   onClick={() => setShowReportModal(true)}
-                  className="absolute bottom-4 left-4 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all z-20 shadow-xl"
+                  className="absolute top-4 right-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-xs uppercase tracking-widest transition-all z-20 shadow-lg"
                 >
                   {t.report}
                 </button>
@@ -697,7 +696,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter  overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                {t.nextNode}
+                Skip
                 <SkipForward className="w-4 h-4 sm:w-6 sm:h-6 md:w-7 md:h-7 group-hover:translate-x-2 transition-transform duration-500" />
               </button>
 
