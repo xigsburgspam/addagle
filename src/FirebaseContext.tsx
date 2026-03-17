@@ -62,6 +62,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               isBlocked: false,
             };
             await setDoc(userDocRef, currentData).catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${firebaseUser.uid}`));
+            await updateDoc(doc(db, 'stats', 'global'), {
+              totalAccounts: increment(1)
+            }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'stats/global'));
           }
 
           // Check if email is blocked

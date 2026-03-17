@@ -652,39 +652,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     </div>
                   )}
                   
-                  {/* Camera Controls */}
-                  <div className="absolute bottom-1 left-1 flex gap-1 z-50">
-                    <select 
-                      className="bg-neutral-800 text-[8px] text-white rounded p-0.5"
-                      value={currentDeviceId}
-                      onChange={(e) => {
-                        setCurrentDeviceId(e.target.value);
-                        localStreamRef.current = null; // Force re-init
-                        findNext();
-                      }}
-                    >
-                      {availableCameras.map(cam => (
-                        <option key={cam.deviceId} value={cam.deviceId}>{cam.label || 'Camera'}</option>
-                      ))}
-                    </select>
-                    <button 
-                      className="bg-neutral-800 text-[8px] text-white rounded p-0.5"
-                      onClick={() => setIsMirrored(!isMirrored)}
-                    >
-                      {isMirrored ? 'Mirror Off' : 'Mirror On'}
-                    </button>
-                    <select 
-                      className="bg-neutral-800 text-[8px] text-white rounded p-0.5"
-                      value={currentFilter}
-                      onChange={(e) => setCurrentFilter(e.target.value)}
-                    >
-                      <option value="none">Normal</option>
-                      <option value="sepia(1)">Vintage</option>
-                      <option value="grayscale(1)">B&W</option>
-                      <option value="hue-rotate(90deg)">Vibrant</option>
-                    </select>
-                  </div>
-
+                  {/* Camera Controls (Moved to main bar) */}
+                  
                   {/* Technical Overlay for Local Video */}
                   <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-3xl" />
                   <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-2">
@@ -746,6 +715,40 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 <button onClick={toggleAudio} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
                   {audioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
                 </button>
+                <button onClick={toggleVideo} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
+                  {videoEnabled ? <Video className="w-5 h-5 sm:w-6 sm:h-6" /> : <VideoOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
+                </button>
+                <select 
+                  className="bg-neutral-800 text-[10px] text-white rounded p-1"
+                  value={currentDeviceId}
+                  onChange={(e) => {
+                    setCurrentDeviceId(e.target.value);
+                    localStreamRef.current = null; // Force re-init
+                    findNext();
+                  }}
+                >
+                  {availableCameras.map(cam => (
+                    <option key={cam.deviceId} value={cam.deviceId}>{cam.label || 'Camera'}</option>
+                  ))}
+                </select>
+                <button 
+                  className="bg-neutral-800 text-[10px] text-white rounded p-1"
+                  onClick={() => setIsMirrored(!isMirrored)}
+                >
+                  {isMirrored ? 'Mirror Off' : 'Mirror On'}
+                </button>
+                <select 
+                  className="bg-neutral-800 text-[10px] text-white rounded p-1"
+                  value={currentFilter}
+                  onChange={(e) => setCurrentFilter(e.target.value)}
+                >
+                  <option value="none">Normal</option>
+                  <option value="sepia(1)">Vintage</option>
+                  <option value="grayscale(1)">B&W</option>
+                  <option value="hue-rotate(90deg)">Vibrant</option>
+                  <option value="saturate(2) hue-rotate(20deg)">TikTok Colorful</option>
+                  <option value="contrast(2)">High Contrast</option>
+                </select>
                 <button onClick={() => setShowChat(!showChat)} className={`relative p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all group lg:hidden ${showChat ? 'bg-emerald-500/20 text-emerald-500' : ''}`}>
                   <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
                   {unreadCount > 0 && !showChat && (
