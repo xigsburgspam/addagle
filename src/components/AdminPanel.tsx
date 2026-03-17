@@ -158,12 +158,7 @@ export const AdminPanel: React.FC = () => {
 
           <button 
             onClick={() => {
-              if (activeRooms.length > 0) {
-                const randomRoom = activeRooms[Math.floor(Math.random() * activeRooms.length)];
-                window.location.href = `/?adminRoom=${randomRoom.id}`;
-              } else {
-                alert('No active encounters detected at this time.');
-              }
+              window.location.href = '/';
             }}
             className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter italic shadow-xl"
           >
@@ -239,14 +234,6 @@ export const AdminPanel: React.FC = () => {
                         <p className="text-[10px] font-mono text-neutral-400">{new Date(report.timestamp?.toDate()).toLocaleString()}</p>
                       </div>
                     </div>
-                    {report.roomId && (
-                      <button 
-                        onClick={() => window.location.href = `/?adminRoom=${report.roomId}`}
-                        className="flex items-center gap-2 text-emerald-500 hover:text-emerald-400 transition-colors text-[10px] font-black uppercase tracking-widest italic"
-                      >
-                        Trace Room <ExternalLink className="w-3 h-3" />
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}

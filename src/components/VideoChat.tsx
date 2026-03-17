@@ -108,32 +108,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
     const interval = setInterval(fetchUsers, 5000);
 
     // Initial start
-    const urlParams = new URLSearchParams(window.location.search);
-    const adminRoom = urlParams.get('adminRoom');
-    if (adminRoom) {
-      peer.once('open', async (id) => {
-        newSocket.emit('admin-join', { roomId: adminRoom, adminPeerId: id });
-        setRoomId(adminRoom);
-        setIsConnected(true);
-        
-        try {
-          const res = await fetch('/api/active-rooms');
-          const rooms = await res.json();
-          const room = rooms.find((r: any) => r.id === adminRoom);
-          if (room && localStreamRef.current) {
-            Object.values(room.peerIds).forEach((pId: any) => {
-              if (pId !== id) {
-                peer.call(pId, localStreamRef.current!);
-              }
-            });
-          }
-        } catch (e) {
-          console.error('Admin join call failed:', e);
-        }
-      });
-    } else {
-      // Don't call findNext automatically, wait for user to click "Connect" in intro
-    }
+    // Don't call findNext automatically, wait for user to click "Connect" in intro
 
     return () => {
       clearInterval(interval);
@@ -148,10 +123,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('matched', async ({ partnerId, partnerPeerId, partnerUid, partnerEmail, initiator, roomId: rId }) => {
+    socket.on('matched', async ({ partnerId, partnerPeerId, partnerUid, partnerEmail, isPartnerAdmin, initiator, roomId: rId }) => {
       setIsSearching(false);
       setIsConnected(true);
       setRoomId(rId);
+      setIsAdminConnected(!!isPartnerAdmin);
       partnerIdRef.current = partnerId;
       partnerUidRef.current = partnerUid;
       partnerEmailRef.current = partnerEmail;
@@ -167,12 +143,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
 
     socket.on('partner-skipped', () => {
       handleDisconnect('Partner skipped');
-      findNext();
+      setTimeout(() => findNext(), 1500); // Add delay to prevent race conditions
     });
 
     socket.on('partner-disconnected', () => {
       handleDisconnect('Partner disconnected');
-      findNext();
+      setTimeout(() => findNext(), 1500); // Add delay to prevent race conditions
     });
 
     socket.on('reaction', (data) => {
@@ -254,17 +230,20 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
     }
 
     setIsSearching(true);
+    const isAdmin = user?.email === 'edublitz71@gmail.com';
     if (peerRef.current?.id) {
       socket.emit('join-queue', { 
         peerId: peerRef.current.id, 
         uid: user?.uid, 
-        email: user?.email 
+        email: user?.email,
+        isAdmin
       });
     } else {
       peerRef.current?.once('open', (id) => socket.emit('join-queue', { 
         peerId: id, 
         uid: user?.uid, 
-        email: user?.email 
+        email: user?.email,
+        isAdmin
       }));
     }
   };

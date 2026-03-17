@@ -52,14 +52,16 @@ service cloud.firestore {
     }
 
     function isNotBlocked() {
-      return !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return !('isBlocked' in userDoc.data) || userDoc.data.isBlocked == false;
     }
 
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'role']) &&
              data.uid is string &&
              data.email is string &&
-             data.role in ['admin', 'user'];
+             data.role in ['admin', 'user'] &&
+             (!('isBlocked' in data) || data.isBlocked is bool);
     }
 
     function isValidReport(data) {
@@ -67,7 +69,7 @@ service cloud.firestore {
              data.reporterId == request.auth.uid &&
              data.reportedId is string &&
              data.reason is string &&
-             data.timestamp == request.time;
+             data.timestamp is timestamp;
     }
 
     // ===============================================================

@@ -19,16 +19,16 @@ async function startServer() {
   const PORT = 3000;
 
   // Matchmaking queue
-  let waitingUser: { socketId: string, peerId: string, uid: string, email: string } | null = null;
+  let waitingUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
   const activeMatches = new Map<string, string>();
-  const rooms = new Map<string, { users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string }> }>();
+  const rooms = new Map<string, { users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // Join matchmaking queue
-    socket.on('join-queue', ({ peerId, uid, email }: { peerId: string, uid: string, email: string }) => {
-      console.log('User joined queue:', socket.id, 'Peer:', peerId, 'UID:', uid);
+    socket.on('join-queue', ({ peerId, uid, email, isAdmin }: { peerId: string, uid: string, email: string, isAdmin: boolean }) => {
+      console.log('User joined queue:', socket.id, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
       
       // If already in a match, clean it up
       const currentPartner = activeMatches.get(socket.id);
@@ -55,8 +55,8 @@ async function startServer() {
         peerIdsMap.set(partner.socketId, partner.peerId);
         
         const metadataMap = new Map();
-        metadataMap.set(socket.id, { uid, email });
-        metadataMap.set(partner.socketId, { uid: partner.uid, email: partner.email });
+        metadataMap.set(socket.id, { uid, email, isAdmin });
+        metadataMap.set(partner.socketId, { uid: partner.uid, email: partner.email, isAdmin: partner.isAdmin });
 
         rooms.set(roomId, { 
           users: [socket.id, partner.socketId], 
@@ -70,6 +70,7 @@ async function startServer() {
           partnerPeerId: partner.peerId, 
           partnerUid: partner.uid,
           partnerEmail: partner.email,
+          isPartnerAdmin: partner.isAdmin,
           initiator: true, 
           roomId 
         });
@@ -78,36 +79,19 @@ async function startServer() {
           partnerPeerId: peerId, 
           partnerUid: uid,
           partnerEmail: email,
+          isPartnerAdmin: isAdmin,
           initiator: false, 
           roomId 
         });
       } else {
         // Add to queue
-        waitingUser = { socketId: socket.id, peerId, uid, email };
+        waitingUser = { socketId: socket.id, peerId, uid, email, isAdmin };
       }
     });
 
     // Chat
     socket.on('send-chat-message', ({ roomId, message }) => {
       socket.to(roomId).emit('chat-message', message);
-    });
-
-    // Admin Join
-    socket.on('admin-join', ({ roomId, adminPeerId }) => {
-      socket.join(roomId);
-      io.to(roomId).emit('admin-connected', { adminPeerId });
-    });
-
-    socket.on('disconnecting', () => {
-      for (const room of socket.rooms) {
-        if (room.startsWith('room_')) {
-          // Check if this socket is an admin (not in the rooms.users list)
-          const roomData = rooms.get(room);
-          if (roomData && !roomData.users.includes(socket.id)) {
-            socket.to(room).emit('admin-disconnected-from-room');
-          }
-        }
-      }
     });
 
     // Reactions
