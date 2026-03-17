@@ -21,22 +21,29 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
   });
 
   useEffect(() => {
-    const unsubStats = onSnapshot(doc(db, 'stats', 'global'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setStats(prev => ({
-          ...prev,
-          onlineUsers: data.onlineUsers || 0,
-          videoChatting: data.videoChatting || 0,
-          textChatting: data.textChatting || 0,
-          totalVideoChats: data.totalVideoChats || 0,
-          totalTextChats: data.totalTextChats || 0,
-          totalAccounts: data.totalAccounts || 0
-        }));
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/stats');
+        if (res.ok) {
+          const data = await res.json();
+          setStats(prev => ({
+            ...prev,
+            onlineUsers: data.onlineUsers || 0,
+            videoChatting: data.videoChatting || 0,
+            textChatting: data.textChatting || 0,
+            totalVideoChats: data.totalVideoChats || 0,
+            totalTextChats: data.totalTextChats || 0,
+          }));
+        }
+      } catch (e) {
+        console.error('Failed to fetch stats:', e);
       }
-    });
+    };
 
-    return () => unsubStats();
+    fetchStats();
+    const interval = setInterval(fetchStats, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogin = async () => {
@@ -157,7 +164,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
               )}
             </div>
 
-            <div className="mt-16 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-8 w-full text-left">
+            <div className="mt-16 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-8 w-full text-left">
               <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
                 <div className="flex items-center gap-2 text-emerald-500">
                   <Users className="w-4 h-4" />
@@ -192,13 +199,6 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
                   <span className="text-[10px] font-black uppercase tracking-widest">Total Text Chats</span>
                 </div>
                 <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalTextChats}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
-                <div className="flex items-center gap-2 text-neutral-600">
-                  <UserCheck className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Accounts Created</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalAccounts}</span>
               </div>
             </div>
           </motion.div>

@@ -4,14 +4,6 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import admin from 'firebase-admin';
-
-// Initialize Firebase Admin with Application Default Credentials
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault()
-  });
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,26 +26,8 @@ async function startServer() {
   const userModes = new Map<string, 'video' | 'text'>();
   const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
 
-  const db = admin.firestore();
-
-  const updateGlobalStats = async () => {
-    try {
-      const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2;
-      const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2;
-      const onlineUsers = io.engine.clientsCount;
-
-      await db.collection('stats').doc('global').set({
-        onlineUsers,
-        videoChatting,
-        textChatting,
-        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    } catch (e) {
-      console.error('Error updating global stats:', e);
-    }
-  };
-
-  setInterval(updateGlobalStats, 10000);
+  let totalVideoChats = 0;
+  let totalTextChats = 0;
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
@@ -102,6 +76,9 @@ async function startServer() {
           peerIds: peerIdsMap,
           metadata: metadataMap
         });
+
+        if (isVideo) totalVideoChats++;
+        else totalTextChats++;
 
         // Notify both users
         io.to(socket.id).emit('matched', { 
@@ -213,7 +190,9 @@ async function startServer() {
     res.json({
       onlineUsers,
       videoChatting,
-      textChatting
+      textChatting,
+      totalVideoChats,
+      totalTextChats
     });
   });
 

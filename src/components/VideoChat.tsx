@@ -518,7 +518,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
           
           <div className="h-6 sm:h-8 w-px bg-neutral-900 mx-1 sm:mx-2" />
           
-          <StatsDisplay />
+          <StatsDisplay mode={mode} />
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
