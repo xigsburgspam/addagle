@@ -107,12 +107,19 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
             className="relative lg:block hidden"
           >
-            <div className="relative aspect-[4/5] rounded-[60px] overflow-hidden border border-neutral-800 bg-neutral-900/40 backdrop-blur-3xl p-12 shadow-[0_0_100px_rgba(16,185,129,0.05)] flex flex-col items-center justify-center text-center">
-              <div className="w-24 h-24 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-8">
-                <Video className="w-12 h-12 text-emerald-500" />
+            <div className="relative aspect-[4/5] flex flex-col items-center justify-center text-center">
+              <div className="relative">
+                <motion.div 
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                  className="w-64 h-64 rounded-full border border-emerald-500/10 border-dashed"
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-32 h-32 rounded-full bg-emerald-500/5 flex items-center justify-center backdrop-blur-3xl border border-emerald-500/10">
+                    <Video className="w-12 h-12 text-emerald-500 animate-pulse" />
+                  </div>
+                </div>
               </div>
-              <h2 className="text-4xl font-black uppercase tracking-tighter italic mb-4">Protocol Ready</h2>
-              <p className="text-neutral-500 font-medium max-w-xs">Secure end-to-end video handshake initialized and waiting for connection.</p>
             </div>
             
             {/* Floating Elements */}

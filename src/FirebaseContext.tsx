@@ -35,13 +35,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubDoc: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
+      if (unsubDoc) {
+        unsubDoc();
+        unsubDoc = null;
+      }
+
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         
-        const unsubDoc = onSnapshot(userDocRef, async (docSnap) => {
+        unsubDoc = onSnapshot(userDocRef, async (docSnap) => {
           let currentData: UserData;
           if (docSnap.exists()) {
             currentData = docSnap.data() as UserData;
@@ -72,15 +79,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }, (error) => {
           handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
         });
-
-        return () => unsubDoc();
       } else {
         setUserData(null);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubDoc) unsubDoc();
+    };
   }, []);
 
   const value = {

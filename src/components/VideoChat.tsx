@@ -34,6 +34,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   const [audioEnabled, setAudioEnabled] = useState(true);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const draggableRef = useRef<HTMLDivElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerRef = useRef<Peer | null>(null);
   const currentCallRef = useRef<MediaConnection | null>(null);
@@ -63,11 +64,26 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
     peerRef.current = peer;
 
     peer.on('error', (err) => {
+      console.error('PeerJS error:', err);
       const errorType = err.type as string;
-      if (['peer-unavailable', 'network', 'disconnected', 'negotiation-failed', 'webrtc'].includes(errorType)) {
+      if (['peer-unavailable', 'network', 'disconnected', 'negotiation-failed', 'webrtc', 'socket-closed', 'socket-error'].includes(errorType)) {
         handleDisconnect('Connection error: ' + errorType);
-        setTimeout(() => findNextRef.current(), 2000);
+        // If it's a socket error, we might need to reconnect or recreate
+        if (errorType === 'socket-closed' || errorType === 'socket-error') {
+          setTimeout(() => {
+            if (peerRef.current && !peerRef.current.destroyed) {
+              peerRef.current.reconnect();
+            }
+          }, 3000);
+        } else {
+          setTimeout(() => findNextRef.current(), 2000);
+        }
       }
+    });
+
+    peer.on('disconnected', () => {
+      console.log('Peer disconnected from server, attempting to reconnect...');
+      peer.reconnect();
     });
 
     peer.on('call', (call) => {
@@ -168,12 +184,17 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       setIsAdminConnected(true);
     });
 
+    socket.on('admin-disconnected-from-room', () => {
+      setIsAdminConnected(false);
+    });
+
     return () => {
       socket.off('matched');
       socket.off('partner-skipped');
       socket.off('partner-disconnected');
       socket.off('reaction');
       socket.off('admin-connected');
+      socket.off('admin-disconnected-from-room');
     };
   }, [socket]);
 
@@ -486,8 +507,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
             )}
 
             {/* Local Video (Technical PiP) - Movable */}
-            <Draggable bounds="parent">
-              <div className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden shadow-2xl border-2 border-neutral-800 z-50 group cursor-move">
+            <Draggable nodeRef={draggableRef} bounds="parent">
+              <div 
+                ref={draggableRef}
+                className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden shadow-2xl border-2 border-neutral-800 z-50 group cursor-move"
+              >
                 <video
                   ref={localVideoRef}
                   autoPlay

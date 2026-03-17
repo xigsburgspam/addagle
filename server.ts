@@ -98,6 +98,18 @@ async function startServer() {
       io.to(roomId).emit('admin-connected', { adminPeerId });
     });
 
+    socket.on('disconnecting', () => {
+      for (const room of socket.rooms) {
+        if (room.startsWith('room_')) {
+          // Check if this socket is an admin (not in the rooms.users list)
+          const roomData = rooms.get(room);
+          if (roomData && !roomData.users.includes(socket.id)) {
+            socket.to(room).emit('admin-disconnected-from-room');
+          }
+        }
+      }
+    });
+
     // Reactions
     socket.on('reaction', (data) => {
       if (data.roomId) {
