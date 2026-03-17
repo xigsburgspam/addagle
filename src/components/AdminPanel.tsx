@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { db, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc } from '../firebase';
-import { Shield, UserX, MessageSquare, ExternalLink, Activity, Terminal, ShieldAlert, Users, Globe, Lock } from 'lucide-react';
+import { Shield, UserX, MessageSquare, ExternalLink, Activity, Terminal, ShieldAlert, Users, Globe, Lock, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
@@ -27,7 +27,6 @@ export const AdminPanel: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'reports' | 'rooms'>('reports');
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -145,40 +144,31 @@ export const AdminPanel: React.FC = () => {
       <main className="flex-1 flex overflow-hidden">
         {/* Navigation Sidebar */}
         <aside className="w-80 border-r border-neutral-900 bg-neutral-950 p-8 flex flex-col gap-4">
-          <button 
-            onClick={() => setActiveTab('reports')}
-            className={`w-full flex items-center justify-between p-5 rounded-2xl transition-all duration-300 group ${
-              activeTab === 'reports' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'
-            }`}
-          >
+          <div className="p-5 rounded-2xl bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <MessageSquare className="w-5 h-5" />
               <span className="font-black uppercase tracking-tighter italic">Reports</span>
             </div>
             {reports.length > 0 && (
-              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
-                activeTab === 'reports' ? 'bg-black text-emerald-500' : 'bg-red-500 text-white'
-              }`}>
+              <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-black text-emerald-500">
                 {reports.length}
               </span>
             )}
-          </button>
+          </div>
 
           <button 
-            onClick={() => setActiveTab('rooms')}
-            className={`w-full flex items-center justify-between p-5 rounded-2xl transition-all duration-300 group ${
-              activeTab === 'rooms' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'
-            }`}
+            onClick={() => {
+              if (activeRooms.length > 0) {
+                const randomRoom = activeRooms[Math.floor(Math.random() * activeRooms.length)];
+                window.location.href = `/?adminRoom=${randomRoom.id}`;
+              } else {
+                alert('No active encounters detected at this time.');
+              }
+            }}
+            className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter italic shadow-xl"
           >
-            <div className="flex items-center gap-4">
-              <Activity className="w-5 h-5" />
-              <span className="font-black uppercase tracking-tighter italic">Live Nodes</span>
-            </div>
-            <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
-              activeTab === 'rooms' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-400'
-            }`}>
-              {activeRooms.length}
-            </span>
+            <Video className="w-6 h-6" />
+            Start Encounter
           </button>
 
           <div className="mt-auto p-6 bg-neutral-900/50 rounded-3xl border border-neutral-900">
@@ -201,134 +191,73 @@ export const AdminPanel: React.FC = () => {
                style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <AnimatePresence mode="wait">
-            {activeTab === 'reports' ? (
-              <motion.div 
-                key="reports"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-5xl mx-auto space-y-6"
-              >
-                <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase italic">Security Reports</h2>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Real-time Feed</span>
-                </div>
+            <motion.div 
+              key="reports"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="max-w-5xl mx-auto space-y-6"
+            >
+              <div className="flex items-center justify-between mb-12">
+                <h2 className="text-4xl font-black tracking-tighter uppercase italic">Security Reports</h2>
+                <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Real-time Feed</span>
+              </div>
 
-                {reports.map((report) => (
-                  <div key={report.id} className="group bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-red-500/30 transition-all duration-500 backdrop-blur-xl">
-                    <div className="flex items-start justify-between mb-8">
-                      <div className="flex items-center gap-6">
-                        <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center">
-                          <ShieldAlert className="w-7 h-7 text-red-500" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reported Entity</p>
-                          <p className="text-xl font-mono text-emerald-500">{report.reportedEmail || report.reportedId}</p>
-                        </div>
+              {reports.map((report) => (
+                <div key={report.id} className="group bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-red-500/30 transition-all duration-500 backdrop-blur-xl">
+                  <div className="flex items-start justify-between mb-8">
+                    <div className="flex items-center gap-6">
+                      <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center">
+                        <ShieldAlert className="w-7 h-7 text-red-500" />
                       </div>
-                      <button
-                        onClick={() => blockUser(report.reportedId, report.reportedEmail)}
-                        className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all shadow-xl shadow-red-600/20"
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reported Entity</p>
+                        <p className="text-xl font-mono text-emerald-500">{report.reportedEmail || report.reportedId}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => blockUser(report.reportedId, report.reportedEmail)}
+                      className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all shadow-xl shadow-red-600/20"
+                    >
+                      <UserX className="w-4 h-4" />
+                      Execute Block
+                    </button>
+                  </div>
+
+                  <div className="bg-neutral-950 p-6 rounded-2xl border border-neutral-900 mb-6">
+                    <p className="text-neutral-400 text-sm font-medium leading-relaxed italic">"{report.reason}"</p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-6 border-t border-neutral-900">
+                    <div className="flex gap-8">
+                      <div>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{new Date(report.timestamp?.toDate()).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {report.roomId && (
+                      <button 
+                        onClick={() => window.location.href = `/?adminRoom=${report.roomId}`}
+                        className="flex items-center gap-2 text-emerald-500 hover:text-emerald-400 transition-colors text-[10px] font-black uppercase tracking-widest italic"
                       >
-                        <UserX className="w-4 h-4" />
-                        Execute Block
+                        Trace Room <ExternalLink className="w-3 h-3" />
                       </button>
-                    </div>
-
-                    <div className="bg-neutral-950 p-6 rounded-2xl border border-neutral-900 mb-6">
-                      <p className="text-neutral-400 text-sm font-medium leading-relaxed italic">"{report.reason}"</p>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-6 border-t border-neutral-900">
-                      <div className="flex gap-8">
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
-                          <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
-                        </div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>
-                          <p className="text-[10px] font-mono text-neutral-400">{new Date(report.timestamp?.toDate()).toLocaleString()}</p>
-                        </div>
-                      </div>
-                      {report.roomId && (
-                        <button 
-                          onClick={() => window.location.href = `/?adminRoom=${report.roomId}`}
-                          className="flex items-center gap-2 text-emerald-500 hover:text-emerald-400 transition-colors text-[10px] font-black uppercase tracking-widest italic"
-                        >
-                          Trace Room <ExternalLink className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
-                ))}
-
-                {reports.length === 0 && (
-                  <div className="py-40 text-center">
-                    <Shield className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
-                    <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Security Violations Logged</p>
-                  </div>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="rooms"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-5xl mx-auto space-y-6"
-              >
-                <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase italic">Active Nodes</h2>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Live Surveillance</span>
                 </div>
+              ))}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {activeRooms.map((room) => (
-                    <div key={room.id} className="group bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/30 transition-all duration-500 backdrop-blur-xl">
-                      <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center">
-                            <Activity className="w-6 h-6 text-emerald-500" />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mb-1">Node ID</p>
-                            <p className="text-lg font-mono text-white">{room.id.split('_').pop()}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-1 bg-neutral-950 rounded-lg border border-neutral-900">
-                          <Users className="w-3 h-3 text-emerald-500" />
-                          <span className="text-[10px] font-mono text-emerald-500">{room.users.length}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3 mb-8">
-                        {room.users.map((userId, idx) => (
-                          <div key={userId} className="flex items-center justify-between text-[10px] font-mono text-neutral-500">
-                            <span>User {idx + 1}</span>
-                            <span className="text-neutral-700">{userId.slice(0, 12)}...</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <button
-                        onClick={() => window.location.href = `/?adminRoom=${room.id}`}
-                        className="w-full bg-white text-black hover:bg-emerald-500 hover:text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all duration-300 flex items-center justify-center gap-3"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Join Surveillance
-                      </button>
-                    </div>
-                  ))}
+              {reports.length === 0 && (
+                <div className="py-40 text-center">
+                  <Shield className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
+                  <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Security Violations Logged</p>
                 </div>
-
-                {activeRooms.length === 0 && (
-                  <div className="py-40 text-center">
-                    <Activity className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
-                    <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Active Nodes Detected</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
+              )}
+            </motion.div>
           </AnimatePresence>
         </div>
       </main>

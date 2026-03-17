@@ -107,27 +107,12 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
             className="relative lg:block hidden"
           >
-            <div className="relative aspect-[4/5] rounded-[60px] overflow-hidden border border-neutral-800 bg-neutral-900/40 backdrop-blur-3xl p-4 shadow-[0_0_100px_rgba(16,185,129,0.05)]">
-              <div className="w-full h-full rounded-[44px] overflow-hidden relative group">
-                <img 
-                  src="https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=1000" 
-                  className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-1000"
-                  alt="Tech Background"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent" />
-                <div className="absolute bottom-12 left-12">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center">
-                      <Video className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-emerald-500">Live Status</p>
-                      <p className="text-lg font-bold">Protocol Active</p>
-                    </div>
-                  </div>
-                </div>
+            <div className="relative aspect-[4/5] rounded-[60px] overflow-hidden border border-neutral-800 bg-neutral-900/40 backdrop-blur-3xl p-12 shadow-[0_0_100px_rgba(16,185,129,0.05)] flex flex-col items-center justify-center text-center">
+              <div className="w-24 h-24 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-8">
+                <Video className="w-12 h-12 text-emerald-500" />
               </div>
+              <h2 className="text-4xl font-black uppercase tracking-tighter italic mb-4">Protocol Ready</h2>
+              <p className="text-neutral-500 font-medium max-w-xs">Secure end-to-end video handshake initialized and waiting for connection.</p>
             </div>
             
             {/* Floating Elements */}

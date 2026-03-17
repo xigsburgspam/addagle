@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users, PhoneOff, Flag, ShieldAlert, Terminal, Radio, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Peer, { MediaConnection } from 'peerjs';
+import Draggable from 'react-draggable';
 import { useFirebase } from '../FirebaseContext';
 import { db, collection, addDoc, Timestamp } from '../firebase';
 import { Chat } from './Chat';
@@ -214,7 +215,14 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
     let stream = localStreamRef.current;
     if (!stream) {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          }, 
+          audio: true 
+        });
         setLocalStream(stream);
         localStreamRef.current = stream;
       } catch (err) {
@@ -401,13 +409,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <button 
-            onClick={() => setShowChat(!showChat)}
-            className={`lg:hidden flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${showChat ? 'bg-emerald-500 text-black border-emerald-500' : 'bg-neutral-900 text-neutral-400 border-neutral-800'}`}
-          >
-            <Smile className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Chat</span>
-          </button>
-          <button 
             onClick={handleDrop}
             className="group flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all duration-300"
           >
@@ -422,7 +423,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-neutral-950">
         
         {/* Video Section */}
-        <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8">
+        <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
           
           <div className="relative w-full h-full max-w-6xl aspect-video bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800">
             
@@ -437,6 +438,23 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
               playsInline
               className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
             />
+
+            {/* Admin Connection Notification */}
+            <AnimatePresence>
+              {isAdminConnected && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="absolute top-4 left-1/2 -translate-x-1/2 z-40"
+                >
+                  <div className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-black rounded-full shadow-2xl border border-emerald-400/50">
+                    <ShieldAlert className="w-5 h-5 animate-pulse" />
+                    <span className="text-xs font-black uppercase tracking-widest italic">Connected to Admin</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             
             {!isConnected && (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
@@ -467,48 +485,30 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
               </div>
             )}
 
-            {/* Admin Notification Overlay */}
-            <AnimatePresence>
-              {isAdminConnected && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute top-4 left-4 sm:top-10 sm:left-10 bg-emerald-500 text-black px-4 py-2 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl flex items-center gap-3 sm:gap-4 z-40 font-black text-[10px] sm:text-xs shadow-2xl shadow-emerald-500/40 uppercase italic tracking-widest"
-                >
-                  <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Active Admin Surveillance
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Local Video (Technical PiP) */}
-            <div className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-32 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden shadow-2xl border-2 border-neutral-800 z-20 group">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
-              />
-              {!videoEnabled && (
-                <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-                  <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
+            {/* Local Video (Technical PiP) - Movable */}
+            <Draggable bounds="parent">
+              <div className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden shadow-2xl border-2 border-neutral-800 z-50 group cursor-move">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
+                />
+                {!videoEnabled && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
+                    <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
+                  </div>
+                )}
+                
+                {/* Technical Overlay for Local Video */}
+                <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-3xl" />
+                <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-2">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[6px] sm:text-[8px] font-bold uppercase tracking-widest text-emerald-500">Local Node</span>
                 </div>
-              )}
-              
-              {/* Technical Overlay for Local Video */}
-              <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-3xl" />
-              <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-2">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[6px] sm:text-[8px] font-bold uppercase tracking-widest text-emerald-500">Local Node</span>
               </div>
-
-              <div className="absolute inset-0 bg-neutral-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 sm:gap-4">
-                <button onClick={toggleAudio} className="p-2 sm:p-3 bg-neutral-900 border border-neutral-800 rounded-xl sm:rounded-2xl hover:bg-neutral-800 transition-colors">
-                  {audioEnabled ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />}
-                </button>
-              </div>
-            </div>
+            </Draggable>
 
             {/* Reaction Overlay */}
             <AnimatePresence>
@@ -559,6 +559,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
             </button>
 
             <div className="flex items-center gap-1 sm:gap-2 md:gap-3 bg-neutral-900 p-1 sm:p-2 md:p-3 rounded-xl sm:rounded-2xl md:rounded-3xl border border-neutral-800 shadow-2xl">
+              <button onClick={toggleAudio} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
+                {audioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
+              </button>
               <button onClick={() => sendReaction('like')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
                 <ThumbsUp className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
               </button>
@@ -574,9 +577,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
 
         {/* Chat Section - Technical Sidebar */}
         <div className={`
-          fixed inset-0 z-50 lg:relative lg:inset-auto lg:z-0
-          ${showChat ? 'flex' : 'hidden lg:flex'}
-          w-full lg:w-[450px] h-full lg:h-full border-t lg:border-t-0 lg:border-l border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
+          flex flex-col
+          w-full lg:w-[450px] h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
           transition-all duration-500
         `}>
           <div className="h-full w-full flex flex-col">
@@ -591,12 +593,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                     <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-500">Encrypted</span>
                   </div>
                 )}
-                <button 
-                  onClick={() => setShowChat(false)}
-                  className="lg:hidden p-2 hover:bg-neutral-900 rounded-lg transition-colors"
-                >
-                  <SkipForward className="w-4 h-4 text-neutral-500 rotate-90" />
-                </button>
               </div>
             </div>
             <div className="flex-1 overflow-hidden">

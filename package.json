@@ -23,6 +23,7 @@
     "peerjs": "^1.5.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-draggable": "^4.5.0",
     "react-router-dom": "^7.13.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
