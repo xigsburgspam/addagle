@@ -586,6 +586,27 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
               />
 
+              {/* Local Video (PiP) - Fixed in Top Right */}
+              <div 
+                className="absolute top-4 right-4 w-24 sm:w-32 md:w-48 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50"
+              >
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
+                />
+                {!videoEnabled && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
+                    <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
+                  </div>
+                )}
+                
+                {/* Technical Overlay for Local Video */}
+                <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl" />
+              </div>
+
               {/* Admin Connection Notification */}
               <AnimatePresence>
                 {isAdminConnected && (
@@ -632,35 +653,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 </div>
               )}
 
-              {/* Local Video (Technical PiP) - Movable */}
-              <Draggable nodeRef={draggableRef} bounds="parent">
-                <div 
-                  ref={draggableRef}
-                  className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 w-24 sm:w-32 md:w-48 aspect-square bg-neutral-950 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-neutral-800 z-50 group cursor-move resize overflow-auto"
-                >
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''} ${isMirrored ? 'scale-x-[-1]' : ''}`}
-                    style={{ filter: currentFilter }}
-                  />
-                  {!videoEnabled && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-                      <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
-                    </div>
-                  )}
-                  
-                  {/* Technical Overlay for Local Video */}
-                  <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-2xl" />
-                  <div className="absolute top-1 left-1 sm:top-2 sm:left-2 flex items-center gap-1">
-                    <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[6px] font-bold uppercase tracking-widest text-emerald-500">Local</span>
-                  </div>
-                </div>
-              </Draggable>
-
               {/* Reaction Overlay */}
               <AnimatePresence>
                 {reaction && (
@@ -679,16 +671,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 )}
               </AnimatePresence>
 
-              {/* Hardware-style Report Button */}
+              {/* Report Button */}
               {isConnected && (
                 <button
                   onClick={() => setShowReportModal(true)}
-                  className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl sm:rounded-2xl transition-all border border-red-500/20 group z-20 shadow-2xl"
+                  className="absolute bottom-4 left-4 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all z-20 shadow-xl"
                 >
-                  <Flag className="w-4 h-4 sm:w-6 sm:h-6" />
-                  <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest ">{t.reportViolation}</span>
+                  {t.report}
                 </button>
               )}
+
 
               {/* Corner Accents */}
               <div className="absolute top-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-l-2 border-emerald-500/30 rounded-tl-2xl sm:rounded-tl-[40px] pointer-events-none" />
@@ -729,24 +721,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   {availableCameras.map(cam => (
                     <option key={cam.deviceId} value={cam.deviceId}>{cam.label || 'Camera'}</option>
                   ))}
-                </select>
-                <button 
-                  className="bg-neutral-800 text-xs text-white rounded-xl px-3 py-2 border border-neutral-700 hover:border-neutral-600 transition-all"
-                  onClick={() => setIsMirrored(!isMirrored)}
-                >
-                  {isMirrored ? 'Mirror Off' : 'Mirror On'}
-                </button>
-                <select 
-                  className="bg-neutral-800 text-xs text-white rounded-xl px-3 py-2 border border-neutral-700 hover:border-neutral-600 transition-all"
-                  value={currentFilter}
-                  onChange={(e) => setCurrentFilter(e.target.value)}
-                >
-                  <option value="none">Normal</option>
-                  <option value="sepia(1)">Vintage</option>
-                  <option value="grayscale(1)">B&W</option>
-                  <option value="hue-rotate(90deg)">Vibrant</option>
-                  <option value="saturate(2) hue-rotate(20deg)">TikTok Colorful</option>
-                  <option value="contrast(2)">High Contrast</option>
                 </select>
                 <button onClick={() => setShowChat(!showChat)} className={`relative p-3 sm:p-4 hover:bg-neutral-800 rounded-2xl transition-all group lg:hidden ${showChat ? 'bg-emerald-500/20 text-emerald-500' : ''}`}>
                   <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
