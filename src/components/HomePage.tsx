@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
+import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup } from '../firebase';
-import { Video, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info } from 'lucide-react';
 import { motion } from 'motion/react';
+import { AdminPopup } from './AdminPopup';
 
 export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
   const { user, userData, loading } = useFirebase();
+  const { language, setLanguage, t } = useLanguage();
+  const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
 
   const handleLogin = async () => {
     try {
@@ -23,6 +28,40 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
       <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
       
+      {/* Header with Language Switcher */}
+      <header className="fixed top-0 left-0 right-0 z-50 p-6 flex justify-between items-center bg-gradient-to-b from-neutral-950 to-transparent">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
+            <Ghost className="w-6 h-6 text-white" />
+          </div>
+          <span className="text-2xl font-black tracking-tighter italic uppercase font-brand">{t.appName}</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsAdminPopupOpen(true)}
+            className="px-4 py-3 bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-xl text-neutral-500 hover:text-emerald-500 hover:border-emerald-500/30 transition-all group flex items-center gap-2"
+          >
+            <span className="text-[10px] font-black uppercase tracking-widest">{t.adminInfo}</span>
+          </button>
+
+          <div className="flex items-center gap-2 bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 p-1 rounded-xl">
+            <button 
+              onClick={() => setLanguage('en')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${language === 'en' ? 'bg-emerald-500 text-black' : 'text-neutral-500 hover:text-white'}`}
+            >
+              EN
+            </button>
+            <button 
+              onClick={() => setLanguage('bn')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${language === 'bn' ? 'bg-emerald-500 text-black' : 'text-neutral-500 hover:text-white'}`}
+            >
+              BN
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Hero Section */}
       <main className="relative z-10 max-w-7xl mx-auto px-6 pt-32 pb-40">
         <div className="grid lg:grid-cols-2 gap-20 items-center">
@@ -37,35 +76,31 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
             </div>
             
             <h1 className="text-7xl lg:text-[120px] font-black tracking-tighter leading-[0.85] mb-10 uppercase italic">
-              Meet <br />
-              <span className="text-emerald-500">Strangers</span> <br />
-              <span className="relative">
-                Securely.
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: '100%' }}
-                  transition={{ delay: 1, duration: 1 }}
-                  className="absolute -bottom-2 left-0 h-2 bg-emerald-500/20 rounded-full" 
-                />
-              </span>
+              {t.tagline.split(' ').map((word, i) => (
+                <React.Fragment key={i}>
+                  {word === 'Strangers' || word === 'অপরিচিতদের' ? <span className="text-emerald-500">{word}</span> : word}
+                  {i === 1 && <br />}
+                  {' '}
+                </React.Fragment>
+              ))}
             </h1>
             
             <p className="text-xl text-neutral-400 max-w-md mb-12 leading-relaxed font-medium">
-              ADDAgle is a premium, moderated video environment built for meaningful random encounters. No bots. No spam. Just real people.
+              {t.description}
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               {user ? (
                 userData?.isBlocked ? (
                   <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-3xl text-center font-bold w-full">
-                    Access Revoked: Terms Violation
+                    {t.accessRevoked}
                   </div>
                 ) : (
                   <button 
                     onClick={onStart}
                     className="group relative bg-white text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:bg-emerald-500 hover:text-white transition-all duration-500 shadow-2xl shadow-white/5 w-full sm:w-auto"
                   >
-                    Start Encounter
+                    {t.startEncounter}
                     <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />
                   </button>
                 )
@@ -80,7 +115,7 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
                     <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
                     <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                   </svg>
-                  Join with Google
+                  {t.joinWithGoogle}
                 </button>
               )}
             </div>
@@ -116,7 +151,7 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-32 h-32 rounded-full bg-emerald-500/5 flex items-center justify-center backdrop-blur-3xl border border-emerald-500/10">
-                    <Video className="w-12 h-12 text-emerald-500 animate-pulse" />
+                    <Ghost className="w-12 h-12 text-emerald-500 animate-pulse" />
                   </div>
                 </div>
               </div>
@@ -146,24 +181,24 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
       <section className="relative z-10 border-t border-neutral-900 bg-neutral-950 py-32">
         <div className="max-w-7xl mx-auto px-6">
           <div className="mb-20">
-            <h2 className="text-4xl font-black tracking-tighter uppercase italic mb-4">The Protocol</h2>
-            <p className="text-neutral-500 font-medium">Engineered for safety, built for speed.</p>
+            <h2 className="text-4xl font-black tracking-tighter uppercase italic mb-4">{t.protocol}</h2>
+            <p className="text-neutral-500 font-medium">{t.protocolDesc}</p>
           </div>
           
           <div className="grid md:grid-cols-12 gap-6">
             <div className="md:col-span-8 p-12 rounded-[40px] bg-neutral-900/30 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Shield className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">Active Moderation</h3>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">{t.activeModeration}</h3>
               <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">
-                Our proprietary moderation engine and human admin team work in tandem to ensure every encounter is safe. We enforce a strict zero-tolerance policy for inappropriate content.
+                {t.activeModerationDesc}
               </p>
             </div>
             
             <div className="md:col-span-4 p-12 rounded-[40px] bg-emerald-500 text-black group overflow-hidden relative">
               <Zap className="w-12 h-12 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">Instant Match</h3>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">{t.instantMatch}</h3>
               <p className="text-black/70 text-lg leading-relaxed font-bold">
-                Low-latency WebRTC protocol ensures you're connected to a new stranger in under 200ms.
+                {t.instantMatchDesc}
               </p>
               <div className="absolute -bottom-10 -right-10 opacity-10">
                 <Zap className="w-40 h-40" />
@@ -172,17 +207,17 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
 
             <div className="md:col-span-4 p-12 rounded-[40px] bg-neutral-900/30 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <MessageSquare className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter italic">Zero History</h3>
+              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter italic">{t.zeroHistory}</h3>
               <p className="text-neutral-400 leading-relaxed">
-                All chats are ephemeral. Once the session ends, the data is purged from memory. We don't store your conversations.
+                {t.zeroHistoryDesc}
               </p>
             </div>
 
             <div className="md:col-span-8 p-12 rounded-[40px] bg-neutral-900/30 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
-              <Video className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">Visual Verification</h3>
+              <Ghost className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter italic">{t.visualVerification}</h3>
               <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">
-                We require active camera feeds to prevent bots and ensure high-quality human interactions. If you turn off your camera, the protocol automatically terminates the session.
+                {t.visualVerificationDesc}
               </p>
             </div>
           </div>
@@ -194,19 +229,22 @@ export const HomePage: React.FC<{ onStart: () => void }> = ({ onStart }) => {
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
-              <Video className="w-6 h-6 text-white" />
+              <Ghost className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-black tracking-tighter italic uppercase">ADDAgle</span>
+            <span className="text-2xl font-black tracking-tighter italic uppercase font-brand">{t.appName}</span>
           </div>
           <p className="text-neutral-600 text-xs font-bold uppercase tracking-[0.3em]">
-            © 2026 ADDAgle Protocol. Secure Encounters.
+            {t.copyright}
           </p>
           <div className="flex gap-8">
-            <a href="#" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Terms</a>
-            <a href="#" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Privacy</a>
+            <Link to="/terms" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">{t.terms}</Link>
+            <Link to="/privacy" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">{t.privacy}</Link>
           </div>
         </div>
       </footer>
+
+      <AdminPopup isOpen={isAdminPopupOpen} onClose={() => setIsAdminPopupOpen(false)} />
     </div>
   );
 };
+

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users, PhoneOff, Flag, ShieldAlert, Terminal, Radio, Activity } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users, PhoneOff, Flag, ShieldAlert, Terminal, Radio, Activity, X, AlertTriangle, Ghost } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Peer, { MediaConnection } from 'peerjs';
 import Draggable from 'react-draggable';
 import { useFirebase } from '../FirebaseContext';
+import { useLanguage } from '../LanguageContext';
 import { db, collection, addDoc, Timestamp } from '../firebase';
 import { Chat } from './Chat';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -15,6 +16,7 @@ interface VideoChatProps {
 
 export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   const { user, userData } = useFirebase();
+  const { t } = useLanguage();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -26,8 +28,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
   const [reaction, setReaction] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isAdminConnected, setIsAdminConnected] = useState(false);
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(
+    window.innerHeight > window.innerWidth ? 'portrait' : 'landscape'
+  );
   
   const [showIntro, setShowIntro] = useState(true);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
   
   const [showChat, setShowChat] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -104,7 +111,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         }
       } catch (e) {}
     };
+
+    const handleResize = () => {
+      setOrientation(window.innerHeight > window.innerWidth ? 'portrait' : 'landscape');
+    };
+
     fetchUsers();
+    window.addEventListener('resize', handleResize);
     const interval = setInterval(fetchUsers, 5000);
 
     // Initial start
@@ -112,6 +125,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
       newSocket.disconnect();
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -223,7 +237,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         setLocalStream(stream);
         localStreamRef.current = stream;
       } catch (err) {
-        alert('Camera and Microphone are required to use ADDAgle.');
+        alert(t.cameraRequired);
         onExit();
         return;
       }
@@ -283,9 +297,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
     }
   };
 
-  const reportUser = async () => {
-    if (!partnerIdRef.current || !user) return;
-    if (!confirm('Report this user for 18+ content?')) return;
+  const submitReport = async () => {
+    if (!partnerIdRef.current || !user || !reportReason) return;
 
     try {
       await addDoc(collection(db, 'reports'), {
@@ -293,11 +306,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         reporterEmail: user.email,
         reportedId: partnerUidRef.current,
         reportedEmail: partnerEmailRef.current,
-        reason: '18+ Content / Inappropriate Behavior',
+        reason: reportReason,
         timestamp: Timestamp.now(),
         roomId: roomId
       });
-      alert('User reported. Thank you for keeping ADDAgle safe.');
+      alert(t.reportSuccess);
+      setShowReportModal(false);
+      setReportReason('');
       handleNext();
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'reports');
@@ -327,8 +342,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                   <ShieldAlert className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tighter italic">Protocol Initialization</h2>
-                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Security Handshake Required</p>
+                  <h2 className="text-2xl font-black uppercase tracking-tighter italic">{t.protocolInit}</h2>
+                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{t.securityHandshake}</p>
                 </div>
               </div>
 
@@ -339,7 +354,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                   </div>
                   <div>
                     <p className="text-sm font-black uppercase tracking-widest mb-1 italic">Camera Requirement</p>
-                    <p className="text-xs text-neutral-500 leading-relaxed">Active video feed is mandatory. Disabling your camera will terminate the session immediately.</p>
+                    <p className="text-xs text-neutral-500 leading-relaxed">{t.cameraMandatory}</p>
                   </div>
                 </div>
                 
@@ -349,7 +364,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                   </div>
                   <div>
                     <p className="text-sm font-black uppercase tracking-widest mb-1 italic">Moderation Policy</p>
-                    <p className="text-xs text-neutral-500 leading-relaxed">ADDAgle is a safe environment. Any inappropriate behavior or 18+ content will result in a permanent hardware ban.</p>
+                    <p className="text-xs text-neutral-500 leading-relaxed">{t.moderationPolicy}</p>
                   </div>
                 </div>
 
@@ -359,7 +374,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                   </div>
                   <div>
                     <p className="text-sm font-black uppercase tracking-widest mb-1 italic">Privacy Protocol</p>
-                    <p className="text-xs text-neutral-500 leading-relaxed">All sessions are end-to-end encrypted. No data is stored or logged beyond the duration of the encounter.</p>
+                    <p className="text-xs text-neutral-500 leading-relaxed">{t.privacyProtocol}</p>
                   </div>
                 </div>
               </div>
@@ -371,8 +386,79 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                 }}
                 className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl font-black text-lg uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20"
               >
-                Accept & Initialize
+                {t.acceptInit}
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Report Modal */}
+      <AnimatePresence>
+        {showReportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-neutral-950/90 backdrop-blur-xl flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-[40px] p-8 shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-6 h-6 text-red-500" />
+                  <h2 className="text-xl font-black uppercase tracking-tighter italic">{t.reportTitle}</h2>
+                </div>
+                <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-neutral-800 rounded-full transition-colors">
+                  <X className="w-5 h-5 text-neutral-500" />
+                </button>
+              </div>
+
+              <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest mb-6">{t.reportReason}</p>
+
+              <div className="space-y-3 mb-8">
+                {[
+                  { id: '18+', label: t.report18 },
+                  { id: 'harm', label: t.reportHarm },
+                  { id: 'violence', label: t.reportViolence },
+                  { id: 'harassment', label: t.reportHarassment },
+                  { id: 'spam', label: t.reportSpam }
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => setReportReason(option.label)}
+                    className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${
+                      reportReason === option.label 
+                        ? 'bg-red-500/10 border-red-500 text-red-500' 
+                        : 'bg-neutral-800/50 border-neutral-700 text-neutral-400 hover:border-neutral-600'
+                    }`}
+                  >
+                    <span className="text-xs font-black uppercase tracking-widest">{option.label}</span>
+                    <div className={`w-4 h-4 rounded-full border-2 transition-all ${
+                      reportReason === option.label ? 'bg-red-500 border-red-500' : 'border-neutral-700'
+                    }`} />
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="flex-1 py-4 bg-neutral-800 hover:bg-neutral-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={submitReport}
+                  disabled={!reportReason}
+                  className="flex-1 py-4 bg-red-500 hover:bg-red-400 disabled:opacity-30 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-red-500/20"
+                >
+                  {t.report}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -383,10 +469,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Video className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              <Ghost className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div className="hidden xs:block">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tighter italic uppercase leading-none">ADDAgle</h1>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tighter italic uppercase leading-none font-brand">{t.appName}</h1>
               <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">Video Protocol v2.5</p>
             </div>
           </div>
@@ -413,8 +499,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
             className="group flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all duration-300"
           >
             <PhoneOff className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:rotate-12 transition-transform" />
-            <span className="hidden sm:inline">Terminate Session</span>
-            <span className="sm:hidden">Exit</span>
+            <span className="hidden sm:inline">{t.terminateSession}</span>
+            <span className="sm:hidden">{t.exit}</span>
           </button>
         </div>
       </header>
@@ -425,7 +511,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
         {/* Video Section */}
         <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
           
-          <div className="relative w-full h-full max-w-6xl aspect-video bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800">
+          <div className={`relative w-full h-full max-w-6xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 ${
+            orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'
+          }`}>
             
             {/* Background Grid for Empty State */}
             <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
@@ -470,8 +558,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                       <Video className="absolute inset-0 m-auto w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
                     </div>
                     <div className="text-center">
-                      <p className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] text-emerald-500 italic mb-2">Searching Node</p>
-                      <p className="text-[8px] sm:text-[10px] font-bold text-neutral-600 uppercase tracking-[0.4em]">Scanning Global Network...</p>
+                      <p className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] text-emerald-500 italic mb-2">{t.searching}</p>
+                      <p className="text-[8px] sm:text-[10px] font-bold text-neutral-600 uppercase tracking-[0.4em]">{t.scanning}</p>
                     </div>
                   </div>
                 ) : (
@@ -479,7 +567,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
                     <div className="w-16 h-16 sm:w-24 sm:h-24 bg-neutral-800 rounded-2xl sm:rounded-3xl flex items-center justify-center border border-neutral-700">
                       <VideoOff className="w-8 h-8 sm:w-12 sm:h-12 text-neutral-600" />
                     </div>
-                    <p className="text-xs sm:text-sm font-black uppercase tracking-[0.3em] text-neutral-600">Protocol Standby</p>
+                    <p className="text-xs sm:text-sm font-black uppercase tracking-[0.3em] text-neutral-600">{t.protocolStandby}</p>
                   </div>
                 )}
               </div>
@@ -534,11 +622,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
             {/* Hardware-style Report Button */}
             {isConnected && (
               <button
-                onClick={reportUser}
+                onClick={() => setShowReportModal(true)}
                 className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl sm:rounded-2xl transition-all border border-red-500/20 group z-20 shadow-2xl"
               >
                 <Flag className="w-4 h-4 sm:w-6 sm:h-6" />
-                <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest italic">Report Violation</span>
+                <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest italic">{t.reportViolation}</span>
               </button>
             )}
 
@@ -557,7 +645,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
               className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter italic overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-              Next Node
+              {t.nextNode}
               <SkipForward className="w-4 h-4 sm:w-6 sm:h-6 md:w-7 md:h-7 group-hover:translate-x-2 transition-transform duration-500" />
             </button>
 
@@ -587,13 +675,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
           <div className="h-full w-full flex flex-col">
             <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
               <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 italic">Session Log</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 italic">{t.sessionLog}</span>
               
               <div className="ml-auto flex items-center gap-4">
                 {isConnected && (
                   <div className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-500">Encrypted</span>
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-500">{t.encrypted}</span>
                   </div>
                 )}
               </div>
@@ -604,8 +692,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit }) => {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-800 p-8 text-center">
                   <Terminal className="w-12 h-12 mb-4 opacity-10" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40">Waiting for peer connection...</p>
-                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] mt-2 opacity-20">Secure channel will initialize upon handshake</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40">{t.waitingPeer}</p>
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] mt-2 opacity-20">{t.secureChannel}</p>
                 </div>
               )}
             </div>

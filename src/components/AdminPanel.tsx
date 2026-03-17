@@ -145,7 +145,7 @@ export const AdminPanel: React.FC = () => {
           </div>
           <h1 className="text-3xl font-black tracking-tighter uppercase italic mb-4">Access Denied</h1>
           <p className="text-neutral-500 font-medium leading-relaxed mb-8">
-            This terminal is restricted to ADDAgle Protocol Administrators. Unauthorized access is logged.
+            This terminal is restricted to Gupto Protocol Administrators. Unauthorized access is logged.
           </p>
           <button 
             onClick={() => window.location.href = '/'}
@@ -169,7 +169,7 @@ export const AdminPanel: React.FC = () => {
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tighter italic uppercase leading-none">Mission Control</h1>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">ADDAgle Protocol v2.5</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">Gupto Protocol v2.5</p>
             </div>
           </div>
           

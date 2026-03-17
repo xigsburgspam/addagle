@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Terminal, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useLanguage } from '../LanguageContext';
 
 interface Message {
   id: string;
@@ -16,6 +17,7 @@ interface ChatProps {
 }
 
 export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => {
+  const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -43,6 +45,13 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !socket) return;
+
+    // Word limit check
+    const words = inputText.trim().split(/\s+/);
+    if (words.length > 100) {
+      alert(t.chatLimit);
+      return;
+    }
 
     const newMessage: Message = {
       id: Math.random().toString(36).substr(2, 9),

@@ -4,12 +4,16 @@ import { VideoChat } from './components/VideoChat';
 import { AdminPanel } from './components/AdminPanel';
 import { HomePage } from './components/HomePage';
 import { FirebaseProvider, useFirebase } from './FirebaseContext';
+import { LanguageProvider, useLanguage } from './LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { CookieConsent } from './components/CookieConsent';
+import { TermsPrivacy } from './components/TermsPrivacy';
 import { ShieldAlert } from 'lucide-react';
 import { auth } from './firebase';
 
 const AppContent: React.FC = () => {
   const { user, userData, loading } = useFirebase();
+  const { t } = useLanguage();
   const [isChatting, setIsChatting] = useState(false);
 
   if (loading) {
@@ -27,7 +31,7 @@ const AppContent: React.FC = () => {
           <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <ShieldAlert className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic mb-4">Access Revoked</h1>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic mb-4">{t.accessRevoked}</h1>
           <p className="text-neutral-400 font-medium mb-8">Your account has been permanently suspended for violating our community guidelines. This action is final.</p>
           <button 
             onClick={() => auth.signOut()}
@@ -47,13 +51,18 @@ const AppContent: React.FC = () => {
           <Route 
             path="/" 
             element={
-              isChatting && user && !userData?.isBlocked ? (
-                <VideoChat onExit={() => setIsChatting(false)} />
-              ) : (
-                <HomePage onStart={() => setIsChatting(true)} />
-              )
+              <>
+                {isChatting && user && !userData?.isBlocked ? (
+                  <VideoChat onExit={() => setIsChatting(false)} />
+                ) : (
+                  <HomePage onStart={() => setIsChatting(true)} />
+                )}
+                <CookieConsent />
+              </>
             } 
           />
+          <Route path="/terms" element={<TermsPrivacy type="terms" />} />
+          <Route path="/privacy" element={<TermsPrivacy type="privacy" />} />
           <Route path="/xigadmin" element={<AdminPanel />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -65,7 +74,9 @@ const AppContent: React.FC = () => {
 export default function App() {
   return (
     <FirebaseProvider>
-      <AppContent />
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
     </FirebaseProvider>
   );
 }
