@@ -34,8 +34,26 @@ async function startServer() {
   const userModes = new Map<string, 'video' | 'text'>();
   const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
 
-  // Historical stats (in-memory for now, could be persisted to Firestore)
-  // Removed in-memory totalVideoChats and totalTextChats as they are now in Firestore
+  const db = admin.firestore();
+
+  const updateGlobalStats = async () => {
+    try {
+      const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2;
+      const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2;
+      const onlineUsers = io.engine.clientsCount;
+
+      await db.collection('stats').doc('global').set({
+        onlineUsers,
+        videoChatting,
+        textChatting,
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      console.error('Error updating global stats:', e);
+    }
+  };
+
+  setInterval(updateGlobalStats, 10000);
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
@@ -186,6 +204,17 @@ async function startServer() {
   // API routes
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  app.get('/api/stats', (req, res) => {
+    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2;
+    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2;
+    const onlineUsers = io.engine.clientsCount;
+    res.json({
+      onlineUsers,
+      videoChatting,
+      textChatting
+    });
   });
 
   app.get('/api/active-rooms', (req, res) => {

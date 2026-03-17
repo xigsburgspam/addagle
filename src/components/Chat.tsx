@@ -140,7 +140,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
       <form onSubmit={sendMessage} className="p-4 sm:p-6 bg-neutral-950 border-t border-neutral-900">
         {isPartnerTyping && (
           <div className="text-[8px] sm:text-[10px] font-mono text-emerald-500/60 mb-2 animate-pulse">
-            Remote node is typing...
+            Typing...
           </div>
         )}
         <div className="relative group">

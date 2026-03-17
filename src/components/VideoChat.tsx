@@ -8,6 +8,7 @@ import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { db, collection, addDoc, Timestamp, doc, setDoc, increment } from '../firebase';
 import { Chat } from './Chat';
+import { StatsDisplay } from './StatsDisplay';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
 interface VideoChatProps {
@@ -25,13 +26,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [stats, setStats] = useState({
-    onlineUsers: 0,
-    videoChatting: 0,
-    textChatting: 0,
-    totalVideoChats: 0,
-    totalTextChats: 0
-  });
   const [reaction, setReaction] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isAdminConnected, setIsAdminConnected] = useState(false);
@@ -114,29 +108,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       });
     });
 
-    const fetchStats = async () => {
-      try {
-        const res = await fetch('/api/stats');
-        if (res.ok) {
-          const data = await res.json();
-          setStats(data);
-        }
-      } catch (e) {}
-    };
-
     const handleResize = () => {
       setOrientation(window.innerHeight > window.innerWidth ? 'portrait' : 'landscape');
     };
 
-    fetchStats();
     window.addEventListener('resize', handleResize);
-    const interval = setInterval(fetchStats, 5000);
 
     // Initial start
     // Don't call findNext automatically, wait for user to click "Connect" in intro
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('resize', handleResize);
       newSocket.disconnect();
       if (localStreamRef.current) {
@@ -537,18 +518,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
           
           <div className="h-6 sm:h-8 w-px bg-neutral-900 mx-1 sm:mx-2" />
           
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
-              <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-500" />
-              <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-400">Live</span>
-              <span className="text-[8px] sm:text-[10px] font-mono text-emerald-500">{stats.onlineUsers.toString().padStart(4, '0')}</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
-              <Users className="w-3 h-3 text-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">{mode === 'video' ? t.videoChatting : t.textChatting}</span>
-              <span className="text-[10px] font-mono text-emerald-500">{mode === 'video' ? stats.videoChatting : stats.textChatting}</span>
-            </div>
-          </div>
+          <StatsDisplay />
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
@@ -583,29 +553,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
+                className={`w-full h-full object-contain ${!isConnected ? 'hidden' : ''}`}
               />
-
-              {/* Local Video (PiP) - Fixed in Top Left */}
-              <div 
-                className="absolute top-4 left-4 w-20 sm:w-24 md:w-32 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50"
-              >
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
-                />
-                {!videoEnabled && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-                    <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
-                  </div>
-                )}
-                
-                {/* Technical Overlay for Local Video */}
-                <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl" />
-              </div>
 
               {/* Admin Connection Notification */}
               <AnimatePresence>
@@ -652,6 +601,28 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Detached Local Video (PiP) - Fixed in Top Left */}
+            <div 
+              className="fixed top-20 left-4 w-20 sm:w-24 md:w-32 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50"
+            >
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover -scale-x-100 ${!videoEnabled ? 'hidden' : ''}`}
+              />
+              {!videoEnabled && (
+                <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
+                  <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
+                </div>
+              )}
+              
+              {/* Technical Overlay for Local Video */}
+              <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl" />
+            </div>
 
               {/* Reaction Overlay */}
               <AnimatePresence>
@@ -671,15 +642,15 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 )}
               </AnimatePresence>
 
-              {/* Report Button */}
-              {isConnected && (
-                <button
-                  onClick={() => setShowReportModal(true)}
-                  className="absolute top-4 right-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-xs uppercase tracking-widest transition-all z-20 shadow-lg"
-                >
-                  {t.report}
-                </button>
-              )}
+            {/* Detached Report Button */}
+            {isConnected && (
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="fixed top-20 right-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-xs uppercase tracking-widest transition-all z-50 shadow-lg"
+              >
+                {t.report}
+              </button>
+            )}
 
 
               {/* Corner Accents */}
@@ -687,7 +658,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-r-2 border-emerald-500/30 rounded-tr-2xl sm:rounded-tr-[40px] pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-l-2 border-emerald-500/30 rounded-bl-2xl sm:rounded-bl-[40px] pointer-events-none" />
               <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
-            </div>
 
               {/* Controls Bar - Hardware Style */}
             <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4 shrink-0">
