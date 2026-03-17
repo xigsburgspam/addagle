@@ -33,11 +33,48 @@ export default function VideoChat() {
     setSocket(newSocket);
 
     // Initialize PeerJS
-    const peer = new Peer();
+    const peer = new Peer({
+      debug: 3,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ],
+        iceCandidatePoolSize: 10,
+      }
+    });
     peerRef.current = peer;
 
     peer.on('open', (id) => {
       console.log('My peer ID is: ' + id);
+    });
+
+    peer.on('error', (err) => {
+      console.error('PeerJS error:', err.type, err);
+      if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'disconnected') {
+        handleDisconnect('Connection error');
+        findNextRef.current();
+      }
+    });
+
+    peer.on('disconnected', () => {
+      console.log('Peer disconnected from server, attempting to reconnect...');
+      peer.reconnect();
     });
 
     peer.on('call', (call) => {
@@ -118,12 +155,26 @@ export default function VideoChat() {
 
   // Handle remote stream attachment
   useEffect(() => {
+    let playTimeout: NodeJS.Timeout;
     if (isConnected && remoteStream && remoteVideoRef.current) {
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
       }
-      remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
+      // Small delay to ensure the video element is ready and stream is stable
+      playTimeout = setTimeout(() => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.play().catch(e => {
+            // Ignore AbortError as it's usually harmless (caused by toggling)
+            if (e.name !== 'AbortError') {
+              console.error('Error playing remote video:', e);
+            }
+          });
+        }
+      }, 100);
     }
+    return () => {
+      if (playTimeout) clearTimeout(playTimeout);
+    };
   }, [isConnected, remoteStream]);
 
   // Handle local stream attachment
@@ -154,6 +205,7 @@ export default function VideoChat() {
     setRemoteStream(null);
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
+      remoteVideoRef.current.load();
     }
     if (currentCallRef.current) {
       currentCallRef.current.close();
@@ -255,14 +307,14 @@ export default function VideoChat() {
         <div className="relative w-full max-w-5xl aspect-video bg-neutral-900 rounded-2xl overflow-hidden shadow-2xl border border-white/5">
           
           {/* Remote Video (Full size) */}
-          {isConnected ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
-          ) : (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
+          />
+          
+          {!isConnected && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-500">
               {isSearching ? (
                 <div className="flex flex-col items-center gap-4">
