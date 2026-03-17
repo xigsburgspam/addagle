@@ -13,6 +13,7 @@ export default function VideoChat() {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(MEETING_DURATION);
   const [onlineCount, setOnlineCount] = useState(0);
   const [reaction, setReaction] = useState<string | null>(null);
@@ -39,6 +40,19 @@ export default function VideoChat() {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          { urls: 'stun:stun.services.mozilla.com' },
+          { urls: 'stun:stun.voiparound.com' },
+          { urls: 'stun:stun.schlund.de' },
+          { urls: 'stun:stun.voipstunt.com' },
+          { urls: 'stun:stun.ekiga.net' },
+          { urls: 'stun:stun.ideasip.com' },
+          { urls: 'stun:stun.iptel.org' },
+          { urls: 'stun:stun.rixtelecom.se' },
+          { urls: 'stun:stun.softjoys.com' },
+          { urls: 'stun:stun.stunprotocol.org' },
           {
             urls: 'turn:openrelay.metered.ca:80',
             username: 'openrelayproject',
@@ -56,6 +70,7 @@ export default function VideoChat() {
           }
         ],
         iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all'
       }
     });
     peerRef.current = peer;
@@ -66,9 +81,14 @@ export default function VideoChat() {
 
     peer.on('error', (err) => {
       console.error('PeerJS error:', err.type, err);
-      if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'disconnected') {
-        handleDisconnect('Connection error');
-        findNextRef.current();
+      // If negotiation fails or peer is unavailable, try to find someone else
+      if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'disconnected' || err.type === 'negotiation-failed') {
+        console.log('Connection failed, searching for next partner...');
+        handleDisconnect('Connection error: ' + err.type);
+        // Add a small delay before searching again to avoid rapid loops
+        setTimeout(() => {
+          findNextRef.current();
+        }, 2000);
       }
     });
 
@@ -201,6 +221,10 @@ export default function VideoChat() {
 
   const handleDisconnect = (reason: string) => {
     console.log('Disconnecting:', reason);
+    if (reason.includes('error')) {
+      setConnectionError(reason);
+      setTimeout(() => setConnectionError(null), 5000);
+    }
     setIsConnected(false);
     setRemoteStream(null);
     if (remoteVideoRef.current) {
@@ -316,7 +340,13 @@ export default function VideoChat() {
           
           {!isConnected && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-500">
-              {isSearching ? (
+              {connectionError ? (
+                <div className="flex flex-col items-center gap-4 text-red-500">
+                  <VideoOff className="w-12 h-12 opacity-50" />
+                  <p className="text-lg font-medium">{connectionError}</p>
+                  <p className="text-sm opacity-70">Retrying in a moment...</p>
+                </div>
+              ) : isSearching ? (
                 <div className="flex flex-col items-center gap-4">
                   <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                   <p className="text-lg font-medium animate-pulse">Finding a stranger...</p>
