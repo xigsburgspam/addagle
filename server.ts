@@ -21,6 +21,7 @@ async function startServer() {
   // Matchmaking queue
   let waitingUser: { socketId: string, peerId: string } | null = null;
   const activeMatches = new Map<string, string>();
+  const rooms = new Map<string, { users: string[], peerIds: Map<string, string> }>();
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
@@ -42,24 +43,51 @@ async function startServer() {
         const partner = waitingUser;
         waitingUser = null;
 
+        const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
         activeMatches.set(socket.id, partner.socketId);
         activeMatches.set(partner.socketId, socket.id);
 
+        socket.join(roomId);
+        io.sockets.sockets.get(partner.socketId)?.join(roomId);
+
+        const peerIdsMap = new Map();
+        peerIdsMap.set(socket.id, peerId);
+        peerIdsMap.set(partner.socketId, partner.peerId);
+        rooms.set(roomId, { users: [socket.id, partner.socketId], peerIds: peerIdsMap });
+
         // Notify both users
-        io.to(socket.id).emit('matched', { partnerId: partner.socketId, partnerPeerId: partner.peerId, initiator: true });
-        io.to(partner.socketId).emit('matched', { partnerId: socket.id, partnerPeerId: peerId, initiator: false });
+        io.to(socket.id).emit('matched', { partnerId: partner.socketId, partnerPeerId: partner.peerId, initiator: true, roomId });
+        io.to(partner.socketId).emit('matched', { partnerId: socket.id, partnerPeerId: peerId, initiator: false, roomId });
       } else {
         // Add to queue
         waitingUser = { socketId: socket.id, peerId };
       }
     });
 
+    // Chat
+    socket.on('send-chat-message', ({ roomId, message }) => {
+      socket.to(roomId).emit('chat-message', message);
+    });
+
+    // Admin Join
+    socket.on('admin-join', ({ roomId, adminPeerId }) => {
+      socket.join(roomId);
+      io.to(roomId).emit('admin-connected', { adminPeerId });
+    });
+
     // Reactions
     socket.on('reaction', (data) => {
-      io.to(data.target).emit('reaction', {
-        type: data.type,
-        sender: socket.id,
-      });
+      if (data.roomId) {
+        socket.to(data.roomId).emit('reaction', {
+          type: data.type,
+          sender: socket.id,
+        });
+      } else if (data.target) {
+        io.to(data.target).emit('reaction', {
+          type: data.type,
+          sender: socket.id,
+        });
+      }
     });
 
     // Next/Skip
@@ -69,6 +97,14 @@ async function startServer() {
         io.to(partnerId).emit('partner-skipped');
         activeMatches.delete(partnerId);
         activeMatches.delete(socket.id);
+        
+        // Find and delete room
+        for (const [roomId, room] of rooms.entries()) {
+          if (room.users.includes(socket.id)) {
+            rooms.delete(roomId);
+            break;
+          }
+        }
       }
       if (waitingUser?.socketId === socket.id) {
         waitingUser = null;
@@ -86,6 +122,13 @@ async function startServer() {
         io.to(partnerId).emit('partner-disconnected');
         activeMatches.delete(partnerId);
         activeMatches.delete(socket.id);
+
+        for (const [roomId, room] of rooms.entries()) {
+          if (room.users.includes(socket.id)) {
+            rooms.delete(roomId);
+            break;
+          }
+        }
       }
     });
   });
@@ -97,6 +140,15 @@ async function startServer() {
 
   app.get('/api/users-online', (req, res) => {
     res.json({ count: io.engine.clientsCount });
+  });
+
+  app.get('/api/active-rooms', (req, res) => {
+    const activeRooms = Array.from(rooms.entries()).map(([id, data]) => ({
+      id,
+      users: data.users,
+      peerIds: Object.fromEntries(data.peerIds)
+    }));
+    res.json(activeRooms);
   });
 
   // Vite middleware for development

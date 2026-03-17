@@ -1,6 +1,6 @@
 {
-  "name": "BlinkMeet",
-  "description": "A minimal random video meeting web app.",
+  "name": "ADDAgle",
+  "description": "A secure random video chat platform with real-time reporting and admin moderation.",
   "requestFramePermissions": [
     "camera",
     "microphone"

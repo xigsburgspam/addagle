@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string
+    //   - photoURL: string
+    //   - role: string (admin/user)
+    //   - isBlocked: boolean
+    //   - createdAt: timestamp
+    //
+    // Collection: reports
+    // Document ID: {reportId}
+    // Fields:
+    //   - reporterId: string (required)
+    //   - reportedId: string (required)
+    //   - reason: string (required)
+    //   - timestamp: timestamp (required)
+    //   - roomId: string
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         (request.auth.token.email == "edublitz71@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isNotBlocked() {
+      return !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'user'];
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['reporterId', 'reportedId', 'reason', 'timestamp']) &&
+             data.reporterId == request.auth.uid &&
+             data.reportedId is string &&
+             data.reason is string &&
+             data.timestamp == request.time;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'user';
+      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.isBlocked == resource.data.isBlocked));
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isNotBlocked() && isValidReport(request.resource.data);
+    }
+  }
+}
