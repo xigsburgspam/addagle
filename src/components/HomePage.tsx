@@ -20,6 +20,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
     totalAccounts: 0
   });
 
+  // Live counters from /api/stats (online, video chatting, text chatting)
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -31,8 +32,6 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
             onlineUsers: data.onlineUsers || 0,
             videoChatting: data.videoChatting || 0,
             textChatting: data.textChatting || 0,
-            totalVideoChats: data.totalVideoChats || 0,
-            totalTextChats: data.totalTextChats || 0,
           }));
         }
       } catch (e) {
@@ -44,6 +43,25 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
     const interval = setInterval(fetchStats, 5000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Persistent counters from Firestore (totalVideoChats, totalTextChats, totalAccounts)
+  useEffect(() => {
+    const statsRef = doc(db, 'stats', 'global');
+    const unsub = onSnapshot(statsRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setStats(prev => ({
+          ...prev,
+          totalVideoChats: data.totalVideoChats || 0,
+          totalTextChats: data.totalTextChats || 0,
+          totalAccounts: data.totalAccounts || 0,
+        }));
+      }
+    }, (e) => {
+      console.error('Firestore stats listen failed:', e);
+    });
+    return () => unsub();
   }, []);
 
   const handleLogin = async () => {
@@ -200,6 +218,13 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
                 </div>
                 <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalTextChats}</span>
               </div>
+              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
+                <div className="flex items-center gap-2 text-neutral-600">
+                  <UserCheck className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Accounts Created</span>
+                 </div>
+                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalAccounts}</span>
+              </div>
             </div>
           </motion.div>
         </div>
@@ -275,4 +300,3 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
     </div>
   );
 };
-

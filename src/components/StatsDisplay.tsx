@@ -45,10 +45,10 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({ mode }) => {
         <span className="text-[8px] sm:text-[10px] font-mono text-emerald-500">{stats.onlineUsers.toString().padStart(4, '0')}</span>
       </div>
       {mode && (
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
-          <Users className="w-3 h-3 text-emerald-500 animate-pulse" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">{mode === 'video' ? t.videoChatting : t.textChatting}</span>
-          <span className="text-[10px] font-mono text-emerald-500">{mode === 'video' ? stats.videoChatting : stats.textChatting}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-neutral-900 rounded-lg border border-neutral-800">
+          <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-500 animate-pulse" />
+          <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-400">{mode === 'video' ? t.videoChatting : t.textChatting}</span>
+          <span className="text-[8px] sm:text-[10px] font-mono text-emerald-500">{mode === 'video' ? stats.videoChatting : stats.textChatting}</span>
         </div>
       )}
     </div>

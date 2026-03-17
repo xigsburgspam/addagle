@@ -4,6 +4,20 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const firebaseConfig = require('./firebase-applet-config.json');
+
+// Initialize Firebase Admin (only once)
+if (!getApps().length) {
+  initializeApp({
+    projectId: firebaseConfig.projectId,
+  });
+}
+const adminDb = getFirestore(firebaseConfig.firestoreDatabaseId);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +93,14 @@ async function startServer() {
 
         if (isVideo) totalVideoChats++;
         else totalTextChats++;
+
+        // Persist to Firestore
+        adminDb.collection('stats').doc('global').set(
+          isVideo
+            ? { totalVideoChats: FieldValue.increment(1) }
+            : { totalTextChats: FieldValue.increment(1) },
+          { merge: true }
+        ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
         // Notify both users
         io.to(socket.id).emit('matched', { 
