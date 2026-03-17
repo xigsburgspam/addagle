@@ -4,6 +4,14 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import admin from 'firebase-admin';
+
+// Initialize Firebase Admin with Application Default Credentials
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault()
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,6 +116,14 @@ async function startServer() {
       socket.to(roomId).emit('chat-message', message);
     });
 
+    socket.on('typing-start', ({ roomId }) => {
+      socket.to(roomId).emit('typing-start');
+    });
+
+    socket.on('typing-stop', ({ roomId }) => {
+      socket.to(roomId).emit('typing-stop');
+    });
+
     // Reactions
     socket.on('reaction', (data) => {
       if (data.roomId) {
@@ -170,17 +186,6 @@ async function startServer() {
   // API routes
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
-  });
-
-  app.get('/api/stats', (req, res) => {
-    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2;
-    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2;
-    
-    res.json({ 
-      onlineUsers: io.engine.clientsCount,
-      videoChatting,
-      textChatting
-    });
   });
 
   app.get('/api/active-rooms', (req, res) => {

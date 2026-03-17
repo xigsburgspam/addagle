@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, Users, Video, MessageCircle } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 
@@ -11,53 +11,10 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
   const { user, userData, loading } = useFirebase();
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
-  const [stats, setStats] = useState({
-    onlineUsers: 0,
-    videoChatting: 0,
-    textChatting: 0,
-    totalVideoChats: 0,
-    totalTextChats: 0
-  });
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const res = await fetch('/api/stats');
-        if (res.ok) {
-          const data = await res.json();
-          setStats(prev => ({
-            ...prev,
-            onlineUsers: data.onlineUsers,
-            videoChatting: data.videoChatting,
-            textChatting: data.textChatting
-          }));
-        }
-      } catch (e) {
-        console.error('Failed to fetch stats:', e);
-      }
-    };
+  // Stats fetching removed as the endpoint is no longer available
 
-    fetchStats();
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'stats', 'global'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setStats(prev => ({
-          ...prev,
-          totalVideoChats: data.totalVideoChats || 0,
-          totalTextChats: data.totalTextChats || 0
-        }));
-      }
-    }, (error) => {
-      console.error('Failed to fetch global stats:', error);
-    });
-
-    return () => unsub();
-  }, []);
+  // Stats fetching removed as the endpoint is no longer available
 
   const handleLogin = async () => {
     try {
@@ -175,44 +132,6 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
                   {t.joinWithGoogle}
                 </button>
               )}
-            </div>
-
-            <div className="mt-16 grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-8 w-full text-left">
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
-                <div className="flex items-center gap-2 text-emerald-500">
-                  <Users className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{t.onlineUsers}</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.onlineUsers}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
-                <div className="flex items-center gap-2 text-emerald-500">
-                  <Video className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{t.videoChatting}</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.videoChatting}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
-                <div className="flex items-center gap-2 text-emerald-500">
-                  <MessageCircle className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{t.textChatting}</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.textChatting}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
-                <div className="flex items-center gap-2 text-neutral-600">
-                  <Zap className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{t.totalVideoChats}</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalVideoChats}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
-                <div className="flex items-center gap-2 text-neutral-600">
-                  <MessageSquare className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{t.totalChats}</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalTextChats}</span>
-              </div>
             </div>
           </motion.div>
         </div>

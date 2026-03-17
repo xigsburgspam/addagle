@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db, onAuthStateChanged, doc, getDoc, setDoc, onSnapshot } from './firebase';
+import { auth, db, onAuthStateChanged, doc, getDoc, setDoc, onSnapshot, updateDoc, increment, getCountFromServer, collection } from './firebase';
 import { User as FirebaseUser } from 'firebase/auth';
 import { handleFirestoreError, OperationType } from './utils/firestoreErrorHandler';
 

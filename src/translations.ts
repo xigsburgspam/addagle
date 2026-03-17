@@ -69,6 +69,7 @@ export const translations = {
     textChatting: 'Text Chatting',
     totalChats: 'Total Chats Done',
     totalVideoChats: 'Total Video Chats Done',
+    totalUsers: 'Accounts Created',
     anonymousChat: 'Anonymous Chat',
     anonymousChatDesc: 'Text-only anonymous chat. No history, no logs, pure anonymity.'
   },
@@ -140,6 +141,7 @@ export const translations = {
     textChatting: 'টেক্সট চ্যাট হচ্ছে',
     totalChats: 'মোট চ্যাট হয়েছে',
     totalVideoChats: 'মোট ভিডিও চ্যাট হয়েছে',
+    totalUsers: 'অ্যাকাউন্ট তৈরি হয়েছে',
     anonymousChat: 'বেনামী চ্যাট',
     anonymousChatDesc: 'শুধুমাত্র টেক্সট চ্যাট। কোনো হিস্ট্রি নেই, কোনো লগ নেই, একদম বেনামী।'
   }

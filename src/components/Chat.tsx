@@ -21,7 +21,9 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!socket) return;
@@ -31,10 +33,17 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
       if (onNewMessage) onNewMessage();
     };
 
+    const handleTypingStart = () => setIsPartnerTyping(true);
+    const handleTypingStop = () => setIsPartnerTyping(false);
+
     socket.on('chat-message', handleMessage);
+    socket.on('typing-start', handleTypingStart);
+    socket.on('typing-stop', handleTypingStop);
 
     return () => {
       socket.off('chat-message', handleMessage);
+      socket.off('typing-start', handleTypingStart);
+      socket.off('typing-stop', handleTypingStop);
     };
   }, [socket]);
 
@@ -42,11 +51,28 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isPartnerTyping]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+    
+    if (socket) {
+      socket.emit('typing-start', { roomId });
+      
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('typing-stop', { roomId });
+      }, 2000);
+    }
+  };
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !socket) return;
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    socket.emit('typing-stop', { roomId });
 
     // Word limit check
     const words = inputText.trim().split(/\s+/);
@@ -118,7 +144,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
             <input
               type="text"
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={handleInputChange}
               placeholder="Transmit..."
               className="flex-1 bg-transparent text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium focus:outline-none placeholder:text-neutral-700"
             />
@@ -131,6 +157,11 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
             </button>
           </div>
         </div>
+        {isPartnerTyping && (
+          <div className="text-[8px] sm:text-[10px] font-mono text-emerald-500/60 mt-2 animate-pulse">
+            Remote node is typing...
+          </div>
+        )}
         <div className="mt-3 sm:mt-4 flex items-center justify-between px-1 sm:px-2">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />

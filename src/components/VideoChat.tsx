@@ -47,6 +47,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [isMirrored, setIsMirrored] = useState(true);
+  const [currentFilter, setCurrentFilter] = useState('none');
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | undefined>(undefined);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const draggableRef = useRef<HTMLDivElement>(null);
@@ -222,6 +226,19 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   }, [isConnected, remoteStream]);
 
   useEffect(() => {
+    const getCameras = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(device => device.kind === 'videoinput');
+        setAvailableCameras(cameras);
+      } catch (err) {
+        console.error('Error fetching cameras:', err);
+      }
+    };
+    getCameras();
+  }, []);
+
+  useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
     }
@@ -250,6 +267,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         try {
           stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
+              deviceId: currentDeviceId ? { exact: currentDeviceId } : undefined,
               width: { ideal: 1280 }, 
               height: { ideal: 720 },
               frameRate: { ideal: 30 }
@@ -551,7 +569,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         {mode === 'video' ? (
           <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-0">
             
-            <div className={`relative w-full max-w-3xl lg:max-w-4xl aspect-square bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800`}>
+            <div 
+              className="relative w-full aspect-square bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800"
+              style={{ maxWidth: 'min(56rem, calc(100vh - 18rem))' }}
+            >
               
               {/* Background Grid for Empty State */}
               <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
@@ -615,14 +636,15 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <Draggable nodeRef={draggableRef} bounds="parent">
                 <div 
                   ref={draggableRef}
-                  className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-square bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden border-2 border-neutral-800 z-50 group cursor-move"
+                  className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-square bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden border-2 border-neutral-800 z-50 group cursor-move resize overflow-auto"
                 >
                   <video
                     ref={localVideoRef}
                     autoPlay
                     playsInline
                     muted
-                    className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''}`}
+                    className={`w-full h-full object-cover ${!videoEnabled ? 'hidden' : ''} ${isMirrored ? 'scale-x-[-1]' : ''}`}
+                    style={{ filter: currentFilter }}
                   />
                   {!videoEnabled && (
                     <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
@@ -630,6 +652,39 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     </div>
                   )}
                   
+                  {/* Camera Controls */}
+                  <div className="absolute bottom-1 left-1 flex gap-1 z-50">
+                    <select 
+                      className="bg-neutral-800 text-[8px] text-white rounded p-0.5"
+                      value={currentDeviceId}
+                      onChange={(e) => {
+                        setCurrentDeviceId(e.target.value);
+                        localStreamRef.current = null; // Force re-init
+                        findNext();
+                      }}
+                    >
+                      {availableCameras.map(cam => (
+                        <option key={cam.deviceId} value={cam.deviceId}>{cam.label || 'Camera'}</option>
+                      ))}
+                    </select>
+                    <button 
+                      className="bg-neutral-800 text-[8px] text-white rounded p-0.5"
+                      onClick={() => setIsMirrored(!isMirrored)}
+                    >
+                      {isMirrored ? 'Mirror Off' : 'Mirror On'}
+                    </button>
+                    <select 
+                      className="bg-neutral-800 text-[8px] text-white rounded p-0.5"
+                      value={currentFilter}
+                      onChange={(e) => setCurrentFilter(e.target.value)}
+                    >
+                      <option value="none">Normal</option>
+                      <option value="sepia(1)">Vintage</option>
+                      <option value="grayscale(1)">B&W</option>
+                      <option value="hue-rotate(90deg)">Vibrant</option>
+                    </select>
+                  </div>
+
                   {/* Technical Overlay for Local Video */}
                   <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl sm:rounded-3xl" />
                   <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex items-center gap-1 sm:gap-2">
