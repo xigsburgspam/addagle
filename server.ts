@@ -27,8 +27,7 @@ async function startServer() {
   const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
 
   // Historical stats (in-memory for now, could be persisted to Firestore)
-  let totalVideoChats = 0;
-  let totalTextChats = 0;
+  // Removed in-memory totalVideoChats and totalTextChats as they are now in Firestore
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
@@ -77,9 +76,6 @@ async function startServer() {
           peerIds: peerIdsMap,
           metadata: metadataMap
         });
-
-        if (isVideo) totalVideoChats++;
-        else totalTextChats++;
 
         // Notify both users
         io.to(socket.id).emit('matched', { 
@@ -183,9 +179,7 @@ async function startServer() {
     res.json({ 
       onlineUsers: io.engine.clientsCount,
       videoChatting,
-      textChatting,
-      totalVideoChats,
-      totalTextChats
+      textChatting
     });
   });
 

@@ -14,9 +14,10 @@ interface ChatProps {
   socket: any;
   roomId: string;
   currentUserId: string;
+  onNewMessage?: () => void;
 }
 
-export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => {
+export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNewMessage }) => {
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -27,6 +28,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => 
 
     const handleMessage = (message: Message) => {
       setMessages(prev => [...prev, message]);
+      if (onNewMessage) onNewMessage();
     };
 
     socket.on('chat-message', handleMessage);
@@ -81,7 +83,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => 
               className={`flex flex-col ${msg.sender === currentUserId ? 'items-end' : 'items-start'}`}
             >
               <div className="flex items-center gap-2 mb-1 px-1">
-                <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 italic">
+                <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 ">
                   {msg.sender === currentUserId ? 'Local Node' : 'Remote Node'}
                 </span>
                 <span className="text-[6px] sm:text-[8px] font-mono text-neutral-700">
@@ -132,7 +134,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId }) => 
         <div className="mt-3 sm:mt-4 flex items-center justify-between px-1 sm:px-2">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 italic">Encryption Active</span>
+            <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 ">Encryption Active</span>
           </div>
           <span className="text-[6px] sm:text-[8px] font-mono text-neutral-800 uppercase">Buffer: 0.0kb</span>
         </div>

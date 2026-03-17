@@ -76,7 +76,7 @@ export const AdminPopup: React.FC<AdminPopupProps> = ({ isOpen, onClose }) => {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black text-white italic tracking-tight">{t.adminName}</h3>
+                  <h3 className="text-2xl font-black text-white  tracking-tight">{t.adminName}</h3>
                   <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.4em] mt-1">{t.adminRole}</p>
                 </div>
               </div>

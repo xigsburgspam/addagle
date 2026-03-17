@@ -72,13 +72,13 @@ export const TermsPrivacy: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) 
           <div className="w-16 h-16 rounded-[24px] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
             {type === 'terms' ? <FileText className="w-8 h-8 text-emerald-500" /> : <Shield className="w-8 h-8 text-emerald-500" />}
           </div>
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tighter uppercase italic">{content.title}</h1>
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tighter uppercase ">{content.title}</h1>
         </div>
 
         <div className="space-y-12">
           {content.sections.map((section, idx) => (
             <div key={idx} className="space-y-4">
-              <h2 className="text-xl font-black uppercase tracking-tight italic text-emerald-500">{section.title}</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight  text-emerald-500">{section.title}</h2>
               <p className="text-neutral-400 leading-relaxed font-medium">{section.text}</p>
             </div>
           ))}

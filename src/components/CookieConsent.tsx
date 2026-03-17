@@ -34,7 +34,7 @@ export const CookieConsent: React.FC = () => {
             </div>
             
             <div className="flex-1 text-center sm:text-left">
-              <h3 className="text-sm font-black uppercase tracking-widest italic mb-1">{t.cookieTitle}</h3>
+              <h3 className="text-sm font-black uppercase tracking-widest  mb-1">{t.cookieTitle}</h3>
               <p className="text-xs text-neutral-500 leading-relaxed">{t.cookieDesc}</p>
             </div>
 

@@ -6,7 +6,7 @@ import Peer, { MediaConnection } from 'peerjs';
 import Draggable from 'react-draggable';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, addDoc, Timestamp } from '../firebase';
+import { db, collection, addDoc, Timestamp, doc, setDoc, increment } from '../firebase';
 import { Chat } from './Chat';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
@@ -44,6 +44,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const [reportReason, setReportReason] = useState('');
   
   const [showChat, setShowChat] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
 
@@ -152,6 +153,17 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       partnerIdRef.current = partnerId;
       partnerUidRef.current = partnerUid;
       partnerEmailRef.current = partnerEmail;
+
+      if (initiator) {
+        try {
+          const statField = mode === 'video' ? 'totalVideoChats' : 'totalTextChats';
+          await setDoc(doc(db, 'stats', 'global'), {
+            [statField]: increment(1)
+          }, { merge: true });
+        } catch (e) {
+          console.error('Failed to update stats:', e);
+        }
+      }
 
       if (initiator && localStreamRef.current) {
         const call = peerRef.current?.call(partnerPeerId, localStreamRef.current);
@@ -276,6 +288,20 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   };
   findNextRef.current = findNext;
 
+  // Reset unread count when chat is opened
+  useEffect(() => {
+    if (showChat) {
+      setUnreadCount(0);
+    }
+  }, [showChat]);
+
+  // Handle new messages
+  const handleNewMessage = () => {
+    if (!showChat && mode === 'video') {
+      setUnreadCount(prev => prev + 1);
+    }
+  };
+
   const handleNext = () => {
     if (socket) socket.emit('next');
     handleDisconnect('User skipped');
@@ -355,7 +381,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   <ShieldAlert className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tighter italic">{t.protocolInit}</h2>
+                  <h2 className="text-2xl font-black uppercase tracking-tighter ">{t.protocolInit}</h2>
                   <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{t.securityHandshake}</p>
                 </div>
               </div>
@@ -366,7 +392,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     <span className="text-[10px] font-black text-emerald-500">01</span>
                   </div>
                   <div>
-                    <p className="text-sm font-black uppercase tracking-widest mb-1 italic">Camera Requirement</p>
+                    <p className="text-sm font-black uppercase tracking-widest mb-1 ">Camera Requirement</p>
                     <p className="text-xs text-neutral-500 leading-relaxed">{t.cameraMandatory}</p>
                   </div>
                 </div>
@@ -376,7 +402,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     <span className="text-[10px] font-black text-emerald-500">02</span>
                   </div>
                   <div>
-                    <p className="text-sm font-black uppercase tracking-widest mb-1 italic">Moderation Policy</p>
+                    <p className="text-sm font-black uppercase tracking-widest mb-1 ">Moderation Policy</p>
                     <p className="text-xs text-neutral-500 leading-relaxed">{t.moderationPolicy}</p>
                   </div>
                 </div>
@@ -386,7 +412,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     <span className="text-[10px] font-black text-emerald-500">03</span>
                   </div>
                   <div>
-                    <p className="text-sm font-black uppercase tracking-widest mb-1 italic">Privacy Protocol</p>
+                    <p className="text-sm font-black uppercase tracking-widest mb-1 ">Privacy Protocol</p>
                     <p className="text-xs text-neutral-500 leading-relaxed">{t.privacyProtocol}</p>
                   </div>
                 </div>
@@ -423,7 +449,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <AlertTriangle className="w-6 h-6 text-red-500" />
-                  <h2 className="text-xl font-black uppercase tracking-tighter italic">{t.reportTitle}</h2>
+                  <h2 className="text-xl font-black uppercase tracking-tighter ">{t.reportTitle}</h2>
                 </div>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-neutral-800 rounded-full transition-colors">
                   <X className="w-5 h-5 text-neutral-500" />
@@ -525,7 +551,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         {mode === 'video' ? (
           <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-0">
             
-            <div className={`relative w-full flex-1 min-h-0 max-w-6xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800`}>
+            <div className={`relative w-full max-w-3xl lg:max-w-4xl aspect-square bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800`}>
               
               {/* Background Grid for Empty State */}
               <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
@@ -550,7 +576,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   >
                     <div className="flex items-center gap-3 px-6 py-3 bg-emerald-500 text-black rounded-full shadow-2xl border border-emerald-400/50">
                       <ShieldAlert className="w-5 h-5 animate-pulse" />
-                      <span className="text-xs font-black uppercase tracking-widest italic">Connected to Admin</span>
+                      <span className="text-xs font-black uppercase tracking-widest ">Connected to Admin</span>
                     </div>
                   </motion.div>
                 )}
@@ -570,7 +596,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                         <Video className="absolute inset-0 m-auto w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
                       </div>
                       <div className="text-center">
-                        <p className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] text-emerald-500 italic mb-2">{t.searching}</p>
+                        <p className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] text-emerald-500  mb-2">{t.searching}</p>
                         <p className="text-[8px] sm:text-[10px] font-bold text-neutral-600 uppercase tracking-[0.4em]">{t.scanning}</p>
                       </div>
                     </div>
@@ -589,7 +615,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <Draggable nodeRef={draggableRef} bounds="parent">
                 <div 
                   ref={draggableRef}
-                  className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-video bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden border-2 border-neutral-800 z-50 group cursor-move"
+                  className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 w-28 sm:w-48 md:w-72 aspect-square bg-neutral-950 rounded-xl sm:rounded-3xl overflow-hidden border-2 border-neutral-800 z-50 group cursor-move"
                 >
                   <video
                     ref={localVideoRef}
@@ -638,7 +664,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl sm:rounded-2xl transition-all border border-red-500/20 group z-20 shadow-2xl"
                 >
                   <Flag className="w-4 h-4 sm:w-6 sm:h-6" />
-                  <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest italic">{t.reportViolation}</span>
+                  <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[8px] sm:text-[10px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all whitespace-nowrap uppercase tracking-widest ">{t.reportViolation}</span>
                 </button>
               )}
 
@@ -654,7 +680,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <button
                 onClick={handleNext}
                 disabled={!isConnected && !isSearching}
-                className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter italic overflow-hidden"
+                className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter  overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                 {t.nextNode}
@@ -665,23 +691,19 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 <button onClick={toggleAudio} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
                   {audioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
                 </button>
-                <button onClick={() => sendReaction('like')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                  <ThumbsUp className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
-                </button>
-                <button onClick={() => sendReaction('wave')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                  <Hand className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
-                </button>
-                <button onClick={() => sendReaction('laugh')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
-                  <Smile className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
-                </button>
-                <button onClick={() => setShowChat(!showChat)} className={`p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all group lg:hidden ${showChat ? 'bg-emerald-500/20 text-emerald-500' : ''}`}>
+                <button onClick={() => setShowChat(!showChat)} className={`relative p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all group lg:hidden ${showChat ? 'bg-emerald-500/20 text-emerald-500' : ''}`}>
                   <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
+                  {unreadCount > 0 && !showChat && (
+                    <span className="absolute top-1 right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white text-[10px] sm:text-xs font-bold flex items-center justify-center rounded-full">
+                      {unreadCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         ) : (
-          <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
+          <div className={`relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0 ${isConnected ? 'hidden' : 'flex-1'}`}>
             <div className="relative w-full h-full max-w-4xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 flex flex-col items-center justify-center text-center p-8">
                <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
                    style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
@@ -706,7 +728,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                           <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
                         </div>
                       </div>
-                      <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase italic mb-4">{t.scanning}</h2>
+                      <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase  mb-4">{t.scanning}</h2>
                       <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 rounded-full border border-emerald-500/20">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">{t.searching}</span>
@@ -722,11 +744,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                       <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-neutral-800 flex items-center justify-center mb-8 border border-neutral-700">
                         <Ghost className="w-10 h-10 sm:w-12 sm:h-12 text-neutral-600" />
                       </div>
-                      <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase italic mb-4 text-neutral-500">{t.anonymousChat}</h2>
+                      <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase  mb-4 text-neutral-500">{t.anonymousChat}</h2>
                       <p className="text-neutral-600 mb-8 max-w-xs">{t.anonymousChatDesc}</p>
                       <button 
                         onClick={findNext}
-                        className="group relative px-10 sm:px-12 py-4 sm:py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-2xl font-black text-lg sm:text-xl uppercase tracking-tighter italic flex items-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all shadow-2xl shadow-emerald-500/20"
+                        className="group relative px-10 sm:px-12 py-4 sm:py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-2xl font-black text-lg sm:text-xl uppercase tracking-tighter  flex items-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all shadow-2xl shadow-emerald-500/20"
                       >
                         {t.startTextChat}
                         <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform" />
@@ -735,32 +757,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   )}
                 </AnimatePresence>
               )}
-
-              {isConnected && (
-                <div className="flex flex-col items-center">
-                  <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4 border border-emerald-500/20">
-                    <UserCheck className="w-10 h-10 text-emerald-500" />
-                  </div>
-                  <h2 className="text-2xl font-black tracking-tighter uppercase italic text-emerald-500 mb-2">Secure Link Active</h2>
-                  <p className="text-neutral-500 text-xs uppercase tracking-widest font-bold">Remote Node Connected</p>
-                  
-                  <div className="mt-8 flex gap-4">
-                    <button 
-                      onClick={handleNext}
-                      className="flex items-center gap-2 px-8 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all"
-                    >
-                      <SkipForward className="w-4 h-4" />
-                      {t.nextNode}
-                    </button>
-                    <button 
-                      onClick={() => setShowReportModal(true)}
-                      className="p-3 bg-neutral-800 hover:bg-red-500 text-white rounded-xl transition-all"
-                    >
-                      <Flag className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -768,16 +764,37 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         {/* Chat Section - Technical Sidebar */}
         <div className={`
           flex flex-col
-          ${mode === 'video' ? 'w-full lg:w-[450px]' : 'w-full lg:w-[500px]'} h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
-          transition-all duration-500 absolute lg:relative bottom-0 left-0 right-0 z-40
+          ${mode === 'video' ? 'w-full lg:w-[450px] h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l absolute lg:relative bottom-0 left-0 right-0 z-40' : (isConnected ? 'w-full h-full flex-1' : 'hidden')}
+          border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
+          transition-all duration-500
           ${mode === 'video' && !showChat ? 'translate-y-full lg:translate-y-0 lg:flex' : 'translate-y-0'}
         `}>
           <div className="h-full w-full flex flex-col">
             <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
               <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 italic">{t.sessionLog}</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 ">{t.sessionLog}</span>
               
               <div className="ml-auto flex items-center gap-4">
+                {mode === 'text' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleNext}
+                      disabled={!isConnected && !isSearching}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed rounded-lg font-black text-xs uppercase tracking-widest transition-all"
+                    >
+                      {t.nextNode}
+                      <SkipForward className="w-3 h-3" />
+                    </button>
+                    {isConnected && (
+                      <button 
+                        onClick={() => setShowReportModal(true)}
+                        className="p-2 bg-neutral-800 hover:bg-red-500 text-white rounded-lg transition-all"
+                      >
+                        <Flag className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
                 {isConnected && (
                   <div className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -793,7 +810,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
             </div>
             <div className="flex-1 overflow-hidden">
               {roomId && user ? (
-                <Chat socket={socket} roomId={roomId} currentUserId={user.uid} />
+                <Chat socket={socket} roomId={roomId} currentUserId={user.uid} onNewMessage={handleNewMessage} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-800 p-8 text-center">
                   <Terminal className="w-12 h-12 mb-4 opacity-10" />

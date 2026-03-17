@@ -145,13 +145,13 @@ export const AdminPanel: React.FC = () => {
           <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
             <ShieldAlert className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-3xl font-black tracking-tighter uppercase italic mb-4">Access Denied</h1>
+          <h1 className="text-3xl font-black tracking-tighter uppercase  mb-4">Access Denied</h1>
           <p className="text-neutral-500 font-medium leading-relaxed mb-8">
             This terminal is restricted to Gupto Protocol Administrators. Unauthorized access is logged.
           </p>
           <button 
             onClick={() => window.location.href = '/'}
-            className="w-full bg-white text-black font-black py-4 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all duration-300 uppercase tracking-widest italic"
+            className="w-full bg-white text-black font-black py-4 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all duration-300 uppercase tracking-widest "
           >
             Return to Base
           </button>
@@ -216,7 +216,7 @@ export const AdminPanel: React.FC = () => {
           >
             <div className="flex items-center gap-4">
               <MessageSquare className="w-5 h-5" />
-              <span className="font-black uppercase tracking-tighter italic">Reports</span>
+              <span className="font-black uppercase tracking-tighter ">Reports</span>
             </div>
             {reports.length > 0 && (
               <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
@@ -237,7 +237,7 @@ export const AdminPanel: React.FC = () => {
           >
             <div className="flex items-center gap-4">
               <UserX className="w-5 h-5" />
-              <span className="font-black uppercase tracking-tighter italic">Blocked</span>
+              <span className="font-black uppercase tracking-tighter ">Blocked</span>
             </div>
             {blockedEmails.length > 0 && (
               <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
@@ -252,7 +252,7 @@ export const AdminPanel: React.FC = () => {
             onClick={() => {
               window.location.href = '/';
             }}
-            className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter italic shadow-xl"
+            className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter  shadow-xl"
           >
             <Video className="w-6 h-6" />
             Start Encounter
@@ -261,7 +261,7 @@ export const AdminPanel: React.FC = () => {
           <div className="mt-auto p-6 bg-neutral-900/50 rounded-3xl border border-neutral-900">
             <div className="flex items-center gap-3 mb-4">
               <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 italic">System Log</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ">System Log</span>
             </div>
             <div className="space-y-2">
               <p className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">07:56:27 - Protocol Initialized</p>
@@ -287,7 +287,7 @@ export const AdminPanel: React.FC = () => {
                 className="max-w-5xl mx-auto space-y-6"
               >
                 <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase italic">Security Reports</h2>
+                  <h2 className="text-4xl font-black tracking-tighter uppercase ">Security Reports</h2>
                   <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Real-time Feed</span>
                 </div>
 
@@ -306,13 +306,13 @@ export const AdminPanel: React.FC = () => {
                       <div className="flex gap-3">
                         <button
                           onClick={() => deleteReport(report.id)}
-                          className="flex items-center gap-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all"
+                          className="flex items-center gap-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest  transition-all"
                         >
                           Dismiss
                         </button>
                         <button
                           onClick={() => blockUser(report.reportedId, report.reportedEmail)}
-                          className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all shadow-xl shadow-red-600/20"
+                          className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest  transition-all shadow-xl shadow-red-600/20"
                         >
                           <UserX className="w-4 h-4" />
                           Execute Block
@@ -321,7 +321,7 @@ export const AdminPanel: React.FC = () => {
                     </div>
 
                     <div className="bg-neutral-950 p-6 rounded-2xl border border-neutral-900 mb-6">
-                      <p className="text-neutral-400 text-sm font-medium leading-relaxed italic">"{report.reason}"</p>
+                      <p className="text-neutral-400 text-sm font-medium leading-relaxed ">"{report.reason}"</p>
                     </div>
 
                     <div className="flex items-center justify-between pt-6 border-t border-neutral-900">
@@ -355,7 +355,7 @@ export const AdminPanel: React.FC = () => {
                 className="max-w-5xl mx-auto space-y-6"
               >
                 <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase italic">Blocked Entities</h2>
+                  <h2 className="text-4xl font-black tracking-tighter uppercase ">Blocked Entities</h2>
                   <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Protocol Deny List</span>
                 </div>
 
@@ -373,7 +373,7 @@ export const AdminPanel: React.FC = () => {
                       </div>
                       <button
                         onClick={() => unblockEmail(blocked.id, blocked.uid)}
-                        className="flex items-center gap-3 bg-white hover:bg-emerald-500 text-black hover:text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest italic transition-all shadow-xl"
+                        className="flex items-center gap-3 bg-white hover:bg-emerald-500 text-black hover:text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest  transition-all shadow-xl"
                       >
                         Restore Access
                       </button>

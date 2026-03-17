@@ -99,7 +99,7 @@ service cloud.firestore {
 
     match /stats/global {
       allow read: if true;
-      allow update: if isAuthenticated() && isNotBlocked();
+      allow write: if true;
     }
 
     match /presence/{userId} {

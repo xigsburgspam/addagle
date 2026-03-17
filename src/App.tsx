@@ -37,7 +37,7 @@ const AppContent: React.FC = () => {
           <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <ShieldAlert className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter italic mb-4">{t.accessRevoked}</h1>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter  mb-4">{t.accessRevoked}</h1>
           <p className="text-neutral-400 font-medium mb-8">Your account has been permanently suspended for violating our community guidelines. This action is final.</p>
           <button 
             onClick={() => auth.signOut()}
