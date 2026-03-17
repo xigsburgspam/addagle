@@ -47,7 +47,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [isMirrored, setIsMirrored] = useState(true);
+  const [isMirrored, setIsMirrored] = useState(false);
   const [currentFilter, setCurrentFilter] = useState('none');
   const [currentDeviceId, setCurrentDeviceId] = useState<string | undefined>(undefined);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
@@ -323,6 +323,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const handleNext = () => {
     if (socket) socket.emit('next');
     handleDisconnect('User skipped');
+    setAudioEnabled(true);
     findNext();
   };
 
@@ -585,9 +586,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 className={`w-full h-full object-cover ${!isConnected ? 'hidden' : ''}`}
               />
 
-              {/* Local Video (PiP) - Fixed in Top Right */}
+              {/* Local Video (PiP) - Fixed in Top Left */}
               <div 
-                className="absolute top-4 right-4 w-24 sm:w-32 md:w-48 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50"
+                className="absolute top-4 left-4 w-20 sm:w-24 md:w-32 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50"
               >
                 <video
                   ref={localVideoRef}
@@ -704,23 +705,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 <button onClick={toggleAudio} className="p-3 sm:p-4 hover:bg-neutral-800 rounded-2xl transition-all disabled:opacity-20 group">
                   {audioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />}
                 </button>
-                <select 
-                  className="bg-neutral-800 text-xs text-white rounded-xl px-3 py-2 border border-neutral-700 hover:border-neutral-600 transition-all"
-                  value={currentDeviceId}
-                  onChange={(e) => {
-                    const newDeviceId = e.target.value;
-                    setCurrentDeviceId(newDeviceId);
-                    if (localStreamRef.current) {
-                      localStreamRef.current.getTracks().forEach(track => track.stop());
-                      localStreamRef.current = null;
-                    }
-                    findNext();
-                  }}
-                >
-                  {availableCameras.map(cam => (
-                    <option key={cam.deviceId} value={cam.deviceId}>{cam.label || 'Camera'}</option>
-                  ))}
-                </select>
                 <button onClick={() => setShowChat(!showChat)} className={`relative p-3 sm:p-4 hover:bg-neutral-800 rounded-2xl transition-all group lg:hidden ${showChat ? 'bg-emerald-500/20 text-emerald-500' : ''}`}>
                   <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
                   {unreadCount > 0 && !showChat && (

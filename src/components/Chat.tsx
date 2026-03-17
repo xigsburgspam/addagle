@@ -117,7 +117,7 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
                 </span>
               </div>
               
-              <div className={`max-w-[90%] px-3 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium leading-relaxed border ${
+              <div className={`max-w-[90%] px-3 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium leading-relaxed border break-words ${
                 msg.sender === currentUserId 
                   ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 border-emerald-500/20 rounded-tr-none' 
                   : 'bg-gradient-to-br from-neutral-900/80 to-neutral-900/40 text-neutral-300 border-neutral-800 rounded-tl-none'
