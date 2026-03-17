@@ -100,7 +100,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
               Next-Gen Video Protocol
             </div>
             
-            <h1 className="text-7xl lg:text-[120px] font-black tracking-tighter leading-[0.85] mb-10 uppercase italic bg-gradient-to-br from-white via-white to-neutral-600 bg-clip-text text-transparent">
+            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[100px] font-black tracking-tighter leading-[0.85] mb-10 uppercase italic bg-gradient-to-br from-white via-white to-neutral-600 bg-clip-text text-transparent">
               {t.tagline.split(' ').map((word, i) => (
                 <React.Fragment key={i}>
                   {word === 'Strangers' || word === 'অপরিচিতদের' ? <span className="text-emerald-500 bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{word}</span> : word}
@@ -282,7 +282,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 py-20 border-t border-neutral-900 bg-neutral-950">
+      <footer className="relative z-10 py-8 border-t border-neutral-900 bg-neutral-950">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">

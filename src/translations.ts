@@ -5,7 +5,7 @@ export const translations = {
     appName: 'Gupto',
     tagline: 'Meet Strangers Securely.',
     description: 'Gupto is a premium, moderated video environment built for meaningful random encounters. No bots. No spam. Just real people.',
-    startEncounter: 'Start Encounter',
+    startEncounter: 'Start Video Chat',
     joinWithGoogle: 'Join with Google',
     accessRevoked: 'Access Revoked: Terms Violation',
     protocol: 'The Protocol',

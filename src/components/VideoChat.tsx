@@ -333,7 +333,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-950 text-white overflow-hidden font-sans selection:bg-emerald-500/30">
+    <div className="flex flex-col h-[100dvh] bg-neutral-950 text-white overflow-hidden font-sans selection:bg-emerald-500/30">
       {/* Intro Overlay */}
       <AnimatePresence>
         {showIntro && (
@@ -523,11 +523,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         
         {/* Video Section */}
         {mode === 'video' ? (
-          <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0">
+          <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-0">
             
-            <div className={`relative w-full h-full max-w-6xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 ${
-              orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'
-            }`}>
+            <div className={`relative w-full flex-1 min-h-0 max-w-6xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800`}>
               
               {/* Background Grid for Empty State */}
               <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
@@ -651,8 +649,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
             </div>
 
-            {/* Controls Bar - Hardware Style */}
-            <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4">
+              {/* Controls Bar - Hardware Style */}
+            <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4 shrink-0">
               <button
                 onClick={handleNext}
                 disabled={!isConnected && !isSearching}
@@ -675,6 +673,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 </button>
                 <button onClick={() => sendReaction('laugh')} disabled={!isConnected} className="p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all disabled:opacity-20 group">
                   <Smile className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
+                </button>
+                <button onClick={() => setShowChat(!showChat)} className={`p-2 sm:p-4 hover:bg-neutral-800 rounded-xl sm:rounded-2xl transition-all group lg:hidden ${showChat ? 'bg-emerald-500/20 text-emerald-500' : ''}`}>
+                  <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform" />
                 </button>
               </div>
             </div>
@@ -768,8 +769,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         <div className={`
           flex flex-col
           ${mode === 'video' ? 'w-full lg:w-[450px]' : 'w-full lg:w-[500px]'} h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l border-neutral-900 bg-neutral-950/95 lg:bg-neutral-950/50 backdrop-blur-2xl lg:backdrop-blur-xl
-          transition-all duration-500
-          ${mode === 'video' && !showChat ? 'hidden lg:flex' : ''}
+          transition-all duration-500 absolute lg:relative bottom-0 left-0 right-0 z-40
+          ${mode === 'video' && !showChat ? 'translate-y-full lg:translate-y-0 lg:flex' : 'translate-y-0'}
         `}>
           <div className="h-full w-full flex flex-col">
             <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
@@ -782,6 +783,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-500">{t.encrypted}</span>
                   </div>
+                )}
+                {mode === 'video' && (
+                  <button onClick={() => setShowChat(false)} className="lg:hidden p-2 hover:bg-neutral-800 rounded-lg transition-colors">
+                    <X className="w-4 h-4 text-neutral-400" />
+                  </button>
                 )}
               </div>
             </div>
