@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
-import { db, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc } from '../firebase';
+import { db, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, Timestamp } from '../firebase';
 import { Shield, UserX, MessageSquare, ExternalLink, Activity, Terminal, ShieldAlert, Users, Globe, Lock, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -40,18 +40,22 @@ export const AdminPanel: React.FC = () => {
   useEffect(() => {
     if (!isAdmin) return;
 
-    const q = query(collection(db, 'reports'), orderBy('timestamp', 'desc'));
+    const q = query(collection(db, 'reports'));
     const unsubscribeReports = onSnapshot(q, (snapshot) => {
       const reportsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
+      // Sort in memory instead of query to avoid issues with missing fields
+      reportsData.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
       setReports(reportsData);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'reports');
     });
 
-    const qBlocked = query(collection(db, 'blocked_emails'), orderBy('blockedAt', 'desc'));
+    const qBlocked = query(collection(db, 'blocked_emails'));
     const unsubscribeBlocked = onSnapshot(qBlocked, (snapshot) => {
       const blockedData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlockedEmail));
+      // Sort in memory
+      blockedData.sort((a, b) => (b.blockedAt?.toMillis?.() || 0) - (a.blockedAt?.toMillis?.() || 0));
       setBlockedEmails(blockedData);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'blocked_emails');
@@ -81,7 +85,10 @@ export const AdminPanel: React.FC = () => {
     if (!confirm('Are you sure you want to delete this report?')) return;
     try {
       await deleteDoc(doc(db, 'reports', reportId));
+      alert('Report dismissed successfully.');
     } catch (e) {
+      console.error('Delete report error:', e);
+      alert('Failed to delete report. Check console for details.');
       handleFirestoreError(e, OperationType.DELETE, `reports/${reportId}`);
     }
   };
@@ -95,6 +102,8 @@ export const AdminPanel: React.FC = () => {
       }
       alert('Email unblocked successfully.');
     } catch (e) {
+      console.error('Unblock error:', e);
+      alert('Failed to unblock. Check console for details.');
       handleFirestoreError(e, OperationType.DELETE, `blocked_emails/${email}`);
     }
   };
@@ -103,10 +112,21 @@ export const AdminPanel: React.FC = () => {
     if (!confirm('Are you sure you want to block this user forever?')) return;
     try {
       await updateDoc(doc(db, 'users', userId), { isBlocked: true });
+      
+      // Always create a blocked email entry if email is available
+      // If not available, we still blocked the UID, but it won't show in the "Blocked Emails" list
+      // which is primarily for email-based blocking.
       if (email) {
         await setDoc(doc(db, 'blocked_emails', email), {
-          blockedAt: new Date(),
+          blockedAt: Timestamp.now(),
           reason: 'Admin Blocked',
+          uid: userId
+        });
+      } else {
+        // Create a placeholder entry for UID-only blocks so they show up in the list
+        await setDoc(doc(db, 'blocked_emails', `uid:${userId}`), {
+          blockedAt: Timestamp.now(),
+          reason: 'Admin Blocked (UID)',
           uid: userId
         });
       }
