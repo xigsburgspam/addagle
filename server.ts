@@ -4,12 +4,13 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { createRequire } from 'module';
+import { readFileSync } from 'fs';
 
-const require = createRequire(import.meta.url);
-const firebaseConfig = require('./firebase-applet-config.json');
+// Load firebase config — resolve relative to source root, works in both dev and prod
+const configPath = new URL('../firebase-applet-config.json', import.meta.url);
+const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
 
 // Initialize Firebase Admin (only once)
 if (!getApps().length) {
