@@ -32,7 +32,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(
     window.innerHeight > window.innerWidth ? 'portrait' : 'landscape'
   );
-  
+
   const [showAgeConsent, setShowAgeConsent] = useState(true);
   const [showIntro, setShowIntro] = useState(false);
   const [faceDetectionWarning, setFaceDetectionWarning] = useState(false);
@@ -45,7 +45,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const disconnectSoundRef = useRef<AudioContext | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
-  
+
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -73,11 +73,38 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
           {
             urls: 'turn:free.expressturn.com:3478',
             username: '000000002089091968',
             credential: 'RMGzeBVkbqAMUd3DD+dKHoiFy4o='
-          }
+          },
+          {
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089185883',
+            credential: 'gZ2jNoAMR1qjuWC+6Zo6dVD7WLo='
+          },
+          {
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089185971',
+            credential: 'MQOVaraA3FVL/t0nhNJ5aSkn0NI='
+          },
+          {
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089186010',
+            credential: 'D54Lk/eZK4wb0jju3mcwScLMqPo='
+          },
+          {
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089186136',
+            credential: 'LADkAnLKd5LGJAuopGli+o2Ju5w='
+          },
+          {
+            urls: 'turn:free.expressturn.com:3478',
+            username: '000000002089186180',
+            credential: 'LT9U7xcnDVKN2nuvMfdBqtGws9Y='
+          },
         ],
         iceCandidatePoolSize: 10,
         iceTransportPolicy: 'all'
@@ -333,19 +360,19 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   const findNext = async () => {
     if (!socket) return;
     if (mode === 'video' && !videoEnabled) return;
-    
+
     if (mode === 'video') {
       let stream = localStreamRef.current;
       if (!stream) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
               deviceId: currentDeviceId ? { exact: currentDeviceId } : undefined,
-              width: { ideal: 1280 }, 
+              width: { ideal: 1280 },
               height: { ideal: 720 },
               frameRate: { ideal: 30 }
-            }, 
-            audio: true 
+            },
+            audio: true
           });
           setLocalStream(stream);
           localStreamRef.current = stream;
@@ -360,17 +387,17 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
     setIsSearching(true);
     const isAdmin = user?.email === 'edublitz71@gmail.com';
     if (peerRef.current?.id) {
-      socket.emit('join-queue', { 
-        peerId: peerRef.current.id, 
-        uid: user?.uid, 
+      socket.emit('join-queue', {
+        peerId: peerRef.current.id,
+        uid: user?.uid,
         email: user?.email,
         isAdmin,
         mode
       });
     } else {
-      peerRef.current?.once('open', (id) => socket.emit('join-queue', { 
-        peerId: id, 
-        uid: user?.uid, 
+      peerRef.current?.once('open', (id) => socket.emit('join-queue', {
+        peerId: id,
+        uid: user?.uid,
         email: user?.email,
         isAdmin,
         mode
@@ -522,19 +549,19 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       {/* Intro Overlay */}
       <AnimatePresence>
         {showIntro && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] bg-neutral-950/90 backdrop-blur-2xl flex items-center justify-center p-6"
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               className="max-w-xl w-full bg-neutral-900 border border-neutral-800 rounded-[40px] p-10 shadow-2xl relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
-              
+
               <div className="flex items-center gap-4 mb-8">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center">
                   <ShieldAlert className="w-6 h-6 text-white" />
@@ -555,7 +582,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     <p className="text-xs text-neutral-500 leading-relaxed">{t.cameraMandatory}</p>
                   </div>
                 </div>
-                
+
                 <div className="flex gap-4">
                   <div className="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-black text-emerald-500">02</span>
@@ -577,7 +604,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={() => {
                   setShowIntro(false);
                   findNext();
@@ -629,8 +656,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                     key={option.id}
                     onClick={() => setReportReason(option.label)}
                     className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${
-                      reportReason === option.label 
-                        ? 'bg-red-500/10 border-red-500 text-red-500' 
+                      reportReason === option.label
+                        ? 'bg-red-500/10 border-red-500 text-red-500'
                         : 'bg-neutral-800/50 border-neutral-700 text-neutral-400 hover:border-neutral-600'
                     }`}
                   >
@@ -662,7 +689,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         )}
       </AnimatePresence>
 
-      {/* Hardware-style Header */}
+      {/* Header */}
       <header className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-neutral-900 bg-neutral-950 z-30">
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -674,14 +701,14 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">{mode === 'video' ? 'Video Protocol v2.5' : 'Anonymous Text v1.0'}</p>
             </div>
           </div>
-          
+
           <div className="h-6 sm:h-8 w-px bg-neutral-900 mx-1 sm:mx-2" />
-          
+
           <StatsDisplay mode={mode} />
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          <button 
+          <button
             onClick={handleDrop}
             className="group flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all duration-300"
           >
@@ -694,12 +721,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-neutral-950">
-        
+
         {/* Video Section */}
         {mode === 'video' ? (
           <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-0">
             <div className="relative w-full h-full bg-neutral-900 overflow-hidden">
-              <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none"
                    style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
 
               <video
@@ -724,16 +751,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   </motion.div>
                 )}
               </AnimatePresence>
-              
+
               {!isConnected && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
                   {isSearching ? (
                     <div className="flex flex-col items-center gap-6 sm:gap-8">
                       <div className="relative">
-                        <motion.div 
+                        <motion.div
                           animate={{ rotate: 360 }}
                           transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                          className="w-24 h-24 sm:w-32 sm:h-32 border-2 border-dashed border-emerald-500/30 rounded-full" 
+                          className="w-24 h-24 sm:w-32 sm:h-32 border-2 border-dashed border-emerald-500/30 rounded-full"
                         />
                         <div className="absolute inset-0 m-auto w-16 h-16 sm:w-24 sm:h-24 border-4 border-emerald-500/10 border-t-emerald-500 rounded-full animate-spin" />
                         <Video className="absolute inset-0 m-auto w-8 h-8 sm:w-10 sm:h-10 text-emerald-500 animate-pulse" />
@@ -771,22 +798,22 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl" />
             </div>
 
-              <AnimatePresence>
-                {reaction && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.5, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 1.5, y: -50 }}
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
-                  >
-                    <span className="text-[6rem] sm:text-[12rem] drop-shadow-[0_0_60px_rgba(0,0,0,0.8)]">
-                      {reaction === 'like' && '👍'}
-                      {reaction === 'wave' && '👋'}
-                      {reaction === 'laugh' && '😂'}
-                    </span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <AnimatePresence>
+              {reaction && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 1.5, y: -50 }}
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+                >
+                  <span className="text-[6rem] sm:text-[12rem] drop-shadow-[0_0_60px_rgba(0,0,0,0.8)]">
+                    {reaction === 'like' && '👍'}
+                    {reaction === 'wave' && '👋'}
+                    {reaction === 'laugh' && '😂'}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {isConnected && (
               <button
@@ -797,16 +824,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               </button>
             )}
 
-              <div className="absolute top-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-l-2 border-emerald-500/30 rounded-tl-2xl sm:rounded-tl-[40px] pointer-events-none" />
-              <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-r-2 border-emerald-500/30 rounded-tr-2xl sm:rounded-tr-[40px] pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-l-2 border-emerald-500/30 rounded-bl-2xl sm:rounded-bl-[40px] pointer-events-none" />
-              <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
+            <div className="absolute top-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-l-2 border-emerald-500/30 rounded-tl-2xl sm:rounded-tl-[40px] pointer-events-none" />
+            <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-r-2 border-emerald-500/30 rounded-tr-2xl sm:rounded-tr-[40px] pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-l-2 border-emerald-500/30 rounded-bl-2xl sm:rounded-bl-[40px] pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
 
             <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4 shrink-0">
               <button
                 onClick={handleNext}
                 disabled={!isConnected && !isSearching}
-                className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter  overflow-hidden"
+                className="group relative flex items-center gap-2 sm:gap-4 px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl sm:rounded-2xl md:rounded-3xl font-black text-sm sm:text-lg md:text-xl transition-all shadow-2xl shadow-emerald-500/20 uppercase tracking-tighter overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                 Skip
@@ -831,9 +858,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         ) : (
           <div className={`relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-[40vh] lg:min-h-0 ${isConnected ? 'hidden' : 'flex-1'}`}>
             <div className="relative w-full h-full max-w-4xl bg-neutral-900 rounded-xl sm:rounded-2xl md:rounded-[40px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-neutral-800 flex flex-col items-center justify-center text-center p-8">
-               <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none"
                    style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
-              
+
               {!isConnected && (
                 <AnimatePresence mode="wait">
                   {isSearching ? (
@@ -845,7 +872,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                       className="flex flex-col items-center"
                     >
                       <div className="relative mb-8">
-                        <motion.div 
+                        <motion.div
                           animate={{ rotate: 360 }}
                           transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
                           className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-2 border-emerald-500/20 border-t-emerald-500"
@@ -872,7 +899,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                       </div>
                       <h2 className="text-2xl sm:text-4xl font-black tracking-tighter uppercase  mb-4 text-neutral-500">{t.anonymousChat}</h2>
                       <p className="text-neutral-600 mb-8 max-w-xs">{t.anonymousChatDesc}</p>
-                      <button 
+                      <button
                         onClick={findNext}
                         className="group relative px-10 sm:px-12 py-4 sm:py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-2xl font-black text-lg sm:text-xl uppercase tracking-tighter  flex items-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all shadow-2xl shadow-emerald-500/20"
                       >
@@ -886,7 +913,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
             </div>
           </div>
         )}
-        
+
         {/* Chat Section */}
         <div className={`
           flex flex-col
@@ -899,7 +926,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
             <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
               <Terminal className="w-4 h-4 text-emerald-500" />
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 ">{t.sessionLog}</span>
-              
+
               <div className="ml-auto flex items-center gap-4">
                 {mode === 'text' && (
                   <div className="flex items-center gap-2">
@@ -912,7 +939,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                       <SkipForward className="w-3 h-3" />
                     </button>
                     {isConnected && (
-                      <button 
+                      <button
                         onClick={() => setShowReportModal(true)}
                         className="p-2 bg-neutral-800 hover:bg-red-500 text-white rounded-lg transition-all"
                       >
