@@ -37,16 +37,16 @@ interface ChatProps {
 export const Chat: React.FC<ChatProps> = ({
   socket, roomId, currentUserId, onNewMessage
 }) => {
-  const [messages,        setMessages]        = useState<Message[]>([]);
-  const [inputText,       setInputText]        = useState('');
-  const [partnerTyping,   setPartnerTyping]    = useState(false);
-  const [replyingTo,      setReplyingTo]       = useState<Message | null>(null);
-  const [menuId,          setMenuId]           = useState<string | null>(null);
-  const [menuFlip,        setMenuFlip]         = useState(false);
-  const [flashId,         setFlashId]          = useState<string | null>(null);
-  const [ripple,          setRipple]           = useState<{ id: string; x: number; y: number } | null>(null);
-  const [swipes,          setSwipes]           = useState<Record<string, Swipe>>({});
-  const [newReactionId,   setNewReactionId]    = useState<string | null>(null);
+  const [messages,      setMessages]      = useState<Message[]>([]);
+  const [inputText,     setInputText]     = useState('');
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const [replyingTo,    setReplyingTo]    = useState<Message | null>(null);
+  const [menuId,        setMenuId]        = useState<string | null>(null);
+  const [menuFlip,      setMenuFlip]      = useState(false);
+  const [flashId,       setFlashId]       = useState<string | null>(null);
+  const [ripple,        setRipple]        = useState<{ id: string; x: number; y: number } | null>(null);
+  const [swipes,        setSwipes]        = useState<Record<string, Swipe>>({});
+  const [newReactionId, setNewReactionId] = useState<string | null>(null);
 
   const scrollRef   = useRef<HTMLDivElement>(null);
   const inputRef    = useRef<HTMLTextAreaElement>(null);
@@ -243,7 +243,7 @@ export const Chat: React.FC<ChatProps> = ({
             <div
               key={msg.id}
               ref={el => { msgRefs.current[msg.id] = el; }}
-              className={`flex w-full ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-0.5' : 'mt-3'}`}
+              className={`flex w-full ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-0.5' : 'mt-3'} ${msg.reaction ? 'mb-4' : ''}`}
             >
               <div
                 className="relative"
