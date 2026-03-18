@@ -10,10 +10,8 @@ interface Report {
   id: string;
   reporterId: string;
   reporterEmail?: string;
-  reporterName?: string;
   reportedId: string;
   reportedEmail?: string;
-  reportedName?: string;
   reason: string;
   timestamp: any;
   roomId?: string;
@@ -60,7 +58,6 @@ export const AdminPanel: React.FC = () => {
 
     const q = query(collection(db, 'reports'));
     const unsubscribeReports = onSnapshot(q, (snapshot) => {
-      console.log('Reports snapshot received, count:', snapshot.size);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
       data.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
       setReports(data);
@@ -312,7 +309,7 @@ export const AdminPanel: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reported Entity</p>
-                          <p className="text-xl font-mono text-emerald-500">{report.reportedName || report.reportedEmail || report.reportedId}</p>
+                          <p className="text-xl font-mono text-emerald-500">{report.reportedEmail || report.reportedId}</p>
                         </div>
                       </div>
                       <div className="flex gap-3">
@@ -332,7 +329,7 @@ export const AdminPanel: React.FC = () => {
                     <div className="flex gap-8 pt-6 border-t border-neutral-900">
                       <div>
                         <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
-                        <p className="text-[10px] font-mono text-neutral-400">{report.reporterName || report.reporterEmail || report.reporterId}</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
                       </div>
                       <div>
                         <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>

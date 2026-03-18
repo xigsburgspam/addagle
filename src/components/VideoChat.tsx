@@ -67,16 +67,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const partnerUidRef = useRef<string | null>(null);
   const partnerEmailRef = useRef<string | null>(null);
 
-  const [district, setDistrict] = useState<string>('');
-
   useEffect(() => {
     const newSocket = io();
     setSocket(newSocket);
 
     const onConnect = () => {
-      getDistrict().then(d => {
-        setDistrict(d);
-        newSocket.emit('set-district', { district: d });
+      getDistrict().then(district => {
+        newSocket.emit('set-district', { district });
       }).catch(() => {});
     };
 
@@ -407,8 +404,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         uid: user?.uid,
         email: user?.email,
         isAdmin,
-        mode,
-        district
+        mode
       });
     } else {
       peerRef.current?.once('open', (id) => socket.emit('join-queue', {
@@ -416,8 +412,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         uid: user?.uid,
         email: user?.email,
         isAdmin,
-        mode,
-        district
+        mode
       }));
     }
   };
@@ -471,23 +466,24 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   };
 
   const submitReport = async () => {
-    if (!partnerIdRef.current || !user || !reportReason || !socket) return;
+    if (!partnerIdRef.current || !user || !reportReason) return;
 
     try {
-      // Emit socket event so server can track blocked matches
-      socket.emit('report-user', {
+      await addDoc(collection(db, 'reports'), {
+        reporterId: user.uid,
+        reporterEmail: user.email,
         reportedId: partnerUidRef.current,
         reportedEmail: partnerEmailRef.current,
         reason: reportReason,
+        timestamp: Timestamp.now(),
         roomId: roomId
       });
-
       alert(t.reportSuccess);
       setShowReportModal(false);
       setReportReason('');
       handleNext();
     } catch (e) {
-      console.error('Failed to emit report:', e);
+      handleFirestoreError(e, OperationType.CREATE, 'reports');
     }
   };
 
