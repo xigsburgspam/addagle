@@ -18,7 +18,8 @@ export async function getDistrict(): Promise<string> {
       },
       (err) => {
         reject(err);
-      }
+      },
+      { timeout: 10000 }
     );
   });
 }

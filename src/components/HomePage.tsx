@@ -471,17 +471,6 @@ export const HomePage: React.FC<{
 
             {/* Map Section */}
             <div className="mt-20 w-full">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tighter">Live User Distribution</h2>
-                  <p className="text-neutral-500 text-sm font-medium">Real-time activity across districts</p>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Map</span>
-                </div>
-              </div>
-              <BangladeshMap districtUsers={stats.districtUsers} />
             </div>
           </motion.div>
         </div>

@@ -8,10 +8,12 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHand
 
 interface Report {
   id: string;
-  reporterId: string;
+  reporterUid: string;
   reporterEmail?: string;
-  reportedId: string;
-  reportedEmail?: string;
+  reporterName?: string;
+  violatorUid: string;
+  violatorEmail?: string;
+  violatorName?: string;
   reason: string;
   timestamp: any;
   roomId?: string;
@@ -309,7 +311,7 @@ export const AdminPanel: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reported Entity</p>
-                          <p className="text-xl font-mono text-emerald-500">{report.reportedEmail || report.reportedId}</p>
+                          <p className="text-xl font-mono text-emerald-500">{report.violatorEmail || report.violatorName || report.violatorUid}</p>
                         </div>
                       </div>
                       <div className="flex gap-3">
@@ -317,7 +319,7 @@ export const AdminPanel: React.FC = () => {
                           className="bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all">
                           Dismiss
                         </button>
-                        <button onClick={() => blockUser(report.reportedId, report.reportedEmail)}
+                        <button onClick={() => blockUser(report.violatorUid, report.violatorEmail)}
                           className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-red-600/20">
                           <UserX className="w-4 h-4" /> Execute Block
                         </button>
@@ -329,7 +331,7 @@ export const AdminPanel: React.FC = () => {
                     <div className="flex gap-8 pt-6 border-t border-neutral-900">
                       <div>
                         <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
-                        <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterName || report.reporterUid}</p>
                       </div>
                       <div>
                         <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>
