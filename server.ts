@@ -19,7 +19,9 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Admin SDK
-admin.initializeApp();
+admin.initializeApp({
+  projectId: firebaseConfig.projectId,
+});
 const adminDb = getAdminFirestore();
 
 const __filename = fileURLToPath(import.meta.url);
