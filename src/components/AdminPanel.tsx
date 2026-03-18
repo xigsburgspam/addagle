@@ -81,7 +81,7 @@ export const AdminPanel: React.FC = () => {
 
     const fetchMatches = async () => {
       try {
-        const res = await fetch('/api/football/matches');
+        const res = await fetch('/api/football/matches/all');
         setMatches(await res.json());
       } catch {}
     };
