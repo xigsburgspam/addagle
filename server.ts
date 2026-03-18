@@ -88,8 +88,34 @@ async function startServer() {
   });
 
   // Matchmaking queues
-  let waitingVideoUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
-  let waitingTextUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
+  let videoQueue: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean }[] = [];
+  let textQueue: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean }[] = [];
+
+  const blockedUsers = new Map<string, Set<string>>(); // uid -> Set of reported uids
+
+  // Load blocked matches from Firestore on start
+  async function loadBlockedMatches() {
+    try {
+      const snapshot = await adminDb.collection('reports').get();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const reporterId = data.reporterId || data.reporterUid;
+        const reportedId = data.reportedId || data.violatorUid;
+        if (reporterId && reportedId) {
+          if (!blockedUsers.has(reporterId)) blockedUsers.set(reporterId, new Set());
+          blockedUsers.get(reporterId)!.add(reportedId);
+          
+          // Also add the reverse for two-way blocking
+          if (!blockedUsers.has(reportedId)) blockedUsers.set(reportedId, new Set());
+          blockedUsers.get(reportedId)!.add(reporterId);
+        }
+      });
+      console.log(`Loaded ${snapshot.size} reports into blocked matches cache.`);
+    } catch (e) {
+      console.error('Failed to load blocked matches:', e);
+    }
+  }
+  loadBlockedMatches();
 
   const activeMatches = new Map<string, string>();
   const userModes = new Map<string, 'video' | 'text'>();
@@ -208,6 +234,10 @@ async function startServer() {
     socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
       console.log('User joined queue:', socket.id, 'Mode:', mode, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
 
+      // Store UID and Email on socket for reporting
+      (socket as any)._uid = uid;
+      (socket as any)._email = email;
+
       userModes.set(socket.id, mode);
 
       // If already in a match, clean it up
@@ -219,13 +249,25 @@ async function startServer() {
       }
 
       const isVideo = mode === 'video';
-      let waitingUser = isVideo ? waitingVideoUser : waitingTextUser;
+      let queue = isVideo ? videoQueue : textQueue;
 
-      if (waitingUser && waitingUser.socketId !== socket.id) {
+      // Remove self if already in queue
+      const selfIndex = queue.findIndex(u => u.socketId === socket.id);
+      if (selfIndex !== -1) queue.splice(selfIndex, 1);
+
+      // Find a partner who is not blocked
+      const partnerIndex = queue.findIndex(u => {
+        if (!uid || !u.uid) return true; // Allow anonymous matching if no UID
+        const blocks = blockedUsers.get(uid);
+        if (blocks && blocks.has(u.uid)) return false;
+        const partnerBlocks = blockedUsers.get(u.uid);
+        if (partnerBlocks && partnerBlocks.has(uid)) return false;
+        return true;
+      });
+
+      if (partnerIndex !== -1) {
         // Match found
-        const partner = waitingUser;
-        if (isVideo) waitingVideoUser = null;
-        else waitingTextUser = null;
+        const partner = queue.splice(partnerIndex, 1)[0];
 
         const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
         activeMatches.set(socket.id, partner.socketId);
@@ -281,8 +323,7 @@ async function startServer() {
         });
       } else {
         // Add to queue
-        if (isVideo) waitingVideoUser = { socketId: socket.id, peerId, uid, email, isAdmin };
-        else waitingTextUser = { socketId: socket.id, peerId, uid, email, isAdmin };
+        queue.push({ socketId: socket.id, peerId, uid, email, isAdmin });
       }
     });
 
@@ -344,8 +385,8 @@ async function startServer() {
           }
         }
       }
-      if (waitingVideoUser?.socketId === socket.id) waitingVideoUser = null;
-      if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
+      videoQueue = videoQueue.filter(u => u.socketId !== socket.id);
+      textQueue = textQueue.filter(u => u.socketId !== socket.id);
     });
 
     // ── Football public chat ────────────────────────────────────────────────
@@ -543,31 +584,85 @@ async function startServer() {
     socket.on('custom-report', async ({ violatorName, reason }) => {
       const roomId = (socket as any)._customRoom;
       const reporterName = (socket as any)._customName;
-      if (!roomId || !reporterName) return;
+      console.log(`Custom report received: ${reporterName} reporting ${violatorName} in room ${roomId}`);
+      
+      if (!roomId || !reporterName) {
+        console.log('Custom report failed: roomId or reporterName missing');
+        return;
+      }
       
       const room = customRooms.get(roomId);
-      if (!room) return;
+      if (!room) {
+        console.log(`Custom report failed: Room ${roomId} not found`);
+        return;
+      }
 
       const violator = room.users.find(u => u.name === violatorName);
       const reporter = room.users.find(u => u.name === reporterName);
 
       if (violator && reporter) {
         try {
+          // Update in-memory blocked matches
+          if (reporter.uid && violator.uid) {
+            if (!blockedUsers.has(reporter.uid)) blockedUsers.set(reporter.uid, new Set());
+            blockedUsers.get(reporter.uid)!.add(violator.uid);
+            
+            if (!blockedUsers.has(violator.uid)) blockedUsers.set(violator.uid, new Set());
+            blockedUsers.get(violator.uid)!.add(reporter.uid);
+          }
+
           await adminDb.collection('reports').add({
-            reporterUid: reporter.uid || 'anonymous',
+            reporterId: reporter.uid || 'anonymous',
             reporterEmail: reporter.email || 'anonymous',
             reporterName: reporter.name,
-            violatorUid: violator.uid || 'anonymous',
-            violatorEmail: violator.email || 'anonymous',
-            violatorName: violator.name,
+            reportedId: violator.uid || 'anonymous',
+            reportedEmail: violator.email || 'anonymous',
+            reportedName: violator.name,
             reason,
             roomId,
             timestamp: FieldValue.serverTimestamp()
           });
-          console.log(`Report submitted: ${reporterName} reported ${violatorName}`);
+          console.log(`Report submitted to Firestore: ${reporterName} reported ${violatorName}`);
         } catch (e) {
-          console.error('Failed to save report:', e);
+          console.error('Failed to save custom report:', e);
         }
+      } else {
+        console.log(`Custom report failed: Violator (${violatorName}) or Reporter (${reporterName}) not found in room users`);
+      }
+    });
+
+    socket.on('report-user', async ({ reportedId, reportedEmail, reason, roomId }) => {
+      const uid = (socket as any)._uid;
+      const email = (socket as any)._email;
+      console.log(`User report received: ${uid} reporting ${reportedId} in room ${roomId}`);
+      
+      if (!uid) {
+        console.log('User report failed: reporter UID missing (user might not be in queue)');
+        return;
+      }
+
+      try {
+        // Update in-memory blocked matches
+        if (reportedId) {
+          if (!blockedUsers.has(uid)) blockedUsers.set(uid, new Set());
+          blockedUsers.get(uid)!.add(reportedId);
+          
+          if (!blockedUsers.has(reportedId)) blockedUsers.set(reportedId, new Set());
+          blockedUsers.get(reportedId)!.add(uid);
+        }
+
+        await adminDb.collection('reports').add({
+          reporterId: uid,
+          reporterEmail: email || 'anonymous',
+          reportedId: reportedId || 'anonymous',
+          reportedEmail: reportedEmail || 'anonymous',
+          reason,
+          roomId,
+          timestamp: FieldValue.serverTimestamp()
+        });
+        console.log(`User report submitted to Firestore: ${uid} reported ${reportedId}`);
+      } catch (e) {
+        console.error('Failed to save user report:', e);
       }
     });
 
@@ -594,8 +689,9 @@ async function startServer() {
     // Disconnect
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
-      if (waitingVideoUser?.socketId === socket.id) waitingVideoUser = null;
-      if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
+      
+      videoQueue = videoQueue.filter(u => u.socketId !== socket.id);
+      textQueue = textQueue.filter(u => u.socketId !== socket.id);
 
       userModes.delete(socket.id);
 
@@ -660,8 +756,8 @@ async function startServer() {
   });
 
   app.get('/api/stats', (req, res) => {
-    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2 + (waitingVideoUser ? 1 : 0);
-    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2 + (waitingTextUser ? 1 : 0);
+    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2 + videoQueue.length;
+    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2 + textQueue.length;
     const customChatting = Array.from(customRooms.values()).reduce((acc, r) => acc + r.users.length, 0);
     const footballChatting = Array.from(footballRooms.values()).reduce((acc, r) => acc + r.names.size, 0);
     const onlineUsers = io.engine.clientsCount;

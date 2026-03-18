@@ -466,24 +466,23 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   };
 
   const submitReport = async () => {
-    if (!partnerIdRef.current || !user || !reportReason) return;
+    if (!partnerIdRef.current || !user || !reportReason || !socket) return;
 
     try {
-      await addDoc(collection(db, 'reports'), {
-        reporterId: user.uid,
-        reporterEmail: user.email,
+      // Emit socket event so server can track blocked matches
+      socket.emit('report-user', {
         reportedId: partnerUidRef.current,
         reportedEmail: partnerEmailRef.current,
         reason: reportReason,
-        timestamp: Timestamp.now(),
         roomId: roomId
       });
+
       alert(t.reportSuccess);
       setShowReportModal(false);
       setReportReason('');
       handleNext();
     } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, 'reports');
+      console.error('Failed to emit report:', e);
     }
   };
 
