@@ -1,21 +1,29 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, {
+  useState, useEffect, useRef, useCallback, useLayoutEffect
+} from 'react';
 import { Send, Reply, X, Check, CheckCheck, Clock, Smile } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const CHAR_LIMIT = 200;
-const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
-const SWIPE_THRESHOLD = 60;
+// ─────────────────────────────────────────────────────────────────────────────
+const CHAR_LIMIT      = 200;
+const SWIPE_THRESHOLD = 58;
+const REACTIONS       = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
-type MessageStatus = 'sending' | 'delivered' | 'seen';
+type Status = 'sending' | 'delivered' | 'seen';
 
 interface Message {
   id: string;
   sender: string;
   text: string;
   timestamp: number;
-  status: MessageStatus;
+  status: Status;
   replyTo?: { id: string; text: string; sender: string } | null;
   reaction?: string | null;
+}
+
+interface Swipe {
+  startX: number; startY: number;
+  dx: number; active: boolean; triggered: boolean;
 }
 
 interface ChatProps {
@@ -24,448 +32,430 @@ interface ChatProps {
   currentUserId: string;
   onNewMessage?: () => void;
 }
+// ─────────────────────────────────────────────────────────────────────────────
 
-interface SwipeState {
-  startX: number;
-  startY: number;
-  dx: number;
-  active: boolean;
-  triggered: boolean;
-}
+export const Chat: React.FC<ChatProps> = ({
+  socket, roomId, currentUserId, onNewMessage
+}) => {
+  const [messages,        setMessages]        = useState<Message[]>([]);
+  const [inputText,       setInputText]        = useState('');
+  const [partnerTyping,   setPartnerTyping]    = useState(false);
+  const [replyingTo,      setReplyingTo]       = useState<Message | null>(null);
+  const [menuId,          setMenuId]           = useState<string | null>(null);
+  const [menuFlip,        setMenuFlip]         = useState(false);
+  const [flashId,         setFlashId]          = useState<string | null>(null);
+  const [ripple,          setRipple]           = useState<{ id: string; x: number; y: number } | null>(null);
+  const [swipes,          setSwipes]           = useState<Record<string, Swipe>>({});
+  const [newReactionId,   setNewReactionId]    = useState<string | null>(null);
 
-export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNewMessage }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-  const [menuAbove, setMenuAbove] = useState(true);
-  const [swipeStates, setSwipeStates] = useState<Record<string, SwipeState>>({});
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const inputRef    = useRef<HTMLTextAreaElement>(null);
+  const typingTimer = useRef<NodeJS.Timeout | null>(null);
+  const bubbleRefs  = useRef<Record<string, HTMLDivElement | null>>({});
+  const msgRefs     = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const bubbleRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages, partnerTyping]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isPartnerTyping]);
-
-  useEffect(() => {
-    const close = (e: MouseEvent | TouchEvent) => {
-      setActiveMenuId(null);
-    };
-    document.addEventListener('mousedown', close);
+    const close = () => setMenuId(null);
+    document.addEventListener('mousedown',  close);
     document.addEventListener('touchstart', close);
     return () => {
-      document.removeEventListener('mousedown', close);
+      document.removeEventListener('mousedown',  close);
       document.removeEventListener('touchstart', close);
     };
   }, []);
 
   useEffect(() => {
     if (!socket) return;
-
-    const handleMessage = (message: Message) => {
-      setMessages(prev => [...prev, { ...message, status: 'delivered' }]);
-      socket.emit('message-seen', { roomId, messageId: message.id });
+    const onMsg = (m: Message) => {
+      setMessages(p => [...p, { ...m, status: 'delivered' }]);
+      socket.emit('message-seen', { roomId, messageId: m.id });
       if (onNewMessage) onNewMessage();
     };
-    const handleTypingStart = () => setIsPartnerTyping(true);
-    const handleTypingStop  = () => setIsPartnerTyping(false);
-    const handleDelivered = ({ messageId }: { messageId: string }) =>
-      setMessages(prev => prev.map(m =>
-        m.id === messageId && m.status === 'sending' ? { ...m, status: 'delivered' } : m
-      ));
-    const handleSeen = ({ messageId }: { messageId: string }) =>
-      setMessages(prev => prev.map(m =>
-        m.id === messageId ? { ...m, status: 'seen' } : m
-      ));
-    const handleReaction = ({ messageId, emoji }: { messageId: string; emoji: string }) =>
-      setMessages(prev => prev.map(m =>
-        m.id === messageId ? { ...m, reaction: emoji } : m
-      ));
-
-    socket.on('chat-message',      handleMessage);
-    socket.on('typing-start',      handleTypingStart);
-    socket.on('typing-stop',       handleTypingStop);
-    socket.on('message-delivered', handleDelivered);
-    socket.on('message-seen',      handleSeen);
-    socket.on('message-reaction',  handleReaction);
-
+    const onDelivered = ({ messageId }: { messageId: string }) =>
+      setMessages(p => p.map(m =>
+        m.id === messageId && m.status === 'sending' ? { ...m, status: 'delivered' } : m));
+    const onSeen = ({ messageId }: { messageId: string }) =>
+      setMessages(p => p.map(m =>
+        m.id === messageId ? { ...m, status: 'seen' } : m));
+    const onReaction = ({ messageId, emoji }: { messageId: string; emoji: string }) => {
+      setMessages(p => p.map(m =>
+        m.id === messageId ? { ...m, reaction: emoji } : m));
+      setNewReactionId(messageId);
+      setTimeout(() => setNewReactionId(null), 600);
+    };
+    socket.on('chat-message',      onMsg);
+    socket.on('typing-start',      () => setPartnerTyping(true));
+    socket.on('typing-stop',       () => setPartnerTyping(false));
+    socket.on('message-delivered', onDelivered);
+    socket.on('message-seen',      onSeen);
+    socket.on('message-reaction',  onReaction);
     return () => {
-      socket.off('chat-message',      handleMessage);
-      socket.off('typing-start',      handleTypingStart);
-      socket.off('typing-stop',       handleTypingStop);
-      socket.off('message-delivered', handleDelivered);
-      socket.off('message-seen',      handleSeen);
-      socket.off('message-reaction',  handleReaction);
+      socket.off('chat-message');      socket.off('typing-start');
+      socket.off('typing-stop');       socket.off('message-delivered');
+      socket.off('message-seen');      socket.off('message-reaction');
     };
   }, [socket, roomId]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    if (val.length > CHAR_LIMIT) return;
-    setInputText(val);
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-    if (socket) {
-      socket.emit('typing-start', { roomId });
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => socket.emit('typing-stop', { roomId }), 2000);
-    }
-  };
-
-  const sendMessage = useCallback(() => {
-    const trimmed = inputText.trim();
-    if (!trimmed || !socket || trimmed.length > CHAR_LIMIT) return;
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  const send = useCallback(() => {
+    const t = inputText.trim();
+    if (!t || !socket || t.length > CHAR_LIMIT) return;
+    if (typingTimer.current) clearTimeout(typingTimer.current);
     socket.emit('typing-stop', { roomId });
-
     const msg: Message = {
-      id: Math.random().toString(36).substr(2, 9),
-      sender: currentUserId,
-      text: trimmed,
-      timestamp: Date.now(),
-      status: 'sending',
+      id: Math.random().toString(36).slice(2, 11),
+      sender: currentUserId, text: t,
+      timestamp: Date.now(), status: 'sending',
       replyTo: replyingTo
         ? { id: replyingTo.id, text: replyingTo.text, sender: replyingTo.sender }
         : null,
       reaction: null,
     };
-    socket.emit('send-chat-message',  { roomId, message: msg });
-    socket.emit('message-delivered',  { roomId, messageId: msg.id });
-    setMessages(prev => [...prev, msg]);
+    socket.emit('send-chat-message', { roomId, message: msg });
+    socket.emit('message-delivered', { roomId, messageId: msg.id });
+    setMessages(p => [...p, msg]);
     setInputText('');
     setReplyingTo(null);
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.focus();
-    }
+    if (inputRef.current) { inputRef.current.style.height = 'auto'; inputRef.current.focus(); }
   }, [inputText, socket, roomId, currentUserId, replyingTo]);
 
-  const sendReaction = (messageId: string, emoji: string) => {
+  const react = (messageId: string, emoji: string) => {
     socket.emit('message-reaction', { roomId, messageId, emoji });
-    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reaction: emoji } : m));
-    setActiveMenuId(null);
+    setMessages(p => p.map(m => m.id === messageId ? { ...m, reaction: emoji } : m));
+    setNewReactionId(messageId);
+    setTimeout(() => setNewReactionId(null), 600);
+    setMenuId(null);
   };
 
-  const openMenu = (msgId: string, e: React.MouseEvent | React.TouchEvent) => {
+  const scrollToMsg = (id: string) => {
+    const el = msgRefs.current[id];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setFlashId(id);
+    setTimeout(() => setFlashId(null), 1200);
+  };
+
+  const openMenu = (id: string, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    const el = bubbleRefs.current[msgId];
+    const el = bubbleRefs.current[id];
     if (el) {
-      const rect = el.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setMenuAbove(spaceBelow < 180);
+      const r = el.getBoundingClientRect();
+      setMenuFlip(window.innerHeight - r.bottom < 190);
     }
-    setActiveMenuId(prev => prev === msgId ? null : msgId);
+    setMenuId(p => p === id ? null : id);
   };
 
-  const onTouchStart = (msgId: string, e: React.TouchEvent) => {
-    const t = e.touches[0];
-    setSwipeStates(prev => ({
-      ...prev,
-      [msgId]: { startX: t.clientX, startY: t.clientY, dx: 0, active: true, triggered: false }
-    }));
+  const triggerRipple = (id: string, e: React.MouseEvent | React.TouchEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    let cx: number, cy: number;
+    if ('touches' in e) {
+      cx = e.touches[0].clientX - rect.left;
+      cy = e.touches[0].clientY - rect.top;
+    } else {
+      cx = (e as React.MouseEvent).clientX - rect.left;
+      cy = (e as React.MouseEvent).clientY - rect.top;
+    }
+    setRipple({ id, x: cx, y: cy });
+    setTimeout(() => setRipple(null), 500);
   };
 
-  const onTouchMove = (msgId: string, e: React.TouchEvent) => {
-    const s = swipeStates[msgId];
-    if (!s || !s.active) return;
+  const swipeStart = (id: string, e: React.TouchEvent) => {
     const t = e.touches[0];
+    setSwipes(p => ({ ...p, [id]: { startX: t.clientX, startY: t.clientY, dx: 0, active: true, triggered: false } }));
+  };
+  const swipeMove = (id: string, e: React.TouchEvent) => {
+    const s = swipes[id];
+    if (!s?.active) return;
+    const t  = e.touches[0];
     const dx = t.clientX - s.startX;
     const dy = Math.abs(t.clientY - s.startY);
-
-    if (dy > 20 && Math.abs(dx) < dy) {
-      setSwipeStates(prev => ({ ...prev, [msgId]: { ...s, active: false } }));
+    if (dy > 18 && Math.abs(dx) < dy) {
+      setSwipes(p => ({ ...p, [id]: { ...s, active: false } }));
       return;
     }
-
-    const clampedDx = Math.max(0, Math.min(dx, SWIPE_THRESHOLD + 20));
-
-    setSwipeStates(prev => ({
-      ...prev,
-      [msgId]: { ...s, dx: clampedDx, triggered: s.triggered || clampedDx >= SWIPE_THRESHOLD }
-    }));
-
-    if (!s.triggered && clampedDx >= SWIPE_THRESHOLD) {
-      if (navigator.vibrate) navigator.vibrate(30);
-    }
+    const cdx = Math.max(0, Math.min(dx, SWIPE_THRESHOLD + 16));
+    const hit  = !s.triggered && cdx >= SWIPE_THRESHOLD;
+    if (hit && navigator.vibrate) navigator.vibrate(28);
+    setSwipes(p => ({ ...p, [id]: { ...s, dx: cdx, triggered: s.triggered || cdx >= SWIPE_THRESHOLD } }));
   };
-
-  const onTouchEnd = (msgId: string, msg: Message) => {
-    const s = swipeStates[msgId];
+  const swipeEnd = (id: string, msg: Message) => {
+    const s = swipes[id];
     if (s?.triggered) {
       setReplyingTo(msg);
       setTimeout(() => inputRef.current?.focus(), 80);
     }
-    setSwipeStates(prev => ({ ...prev, [msgId]: { ...s, dx: 0, active: false, triggered: false } }));
+    setSwipes(p => ({ ...p, [id]: { ...s, dx: 0, active: false, triggered: false } }));
   };
 
-  const StatusIcon = ({ status }: { status: MessageStatus }) => {
-    if (status === 'sending')   return <Clock      className="w-2.5 h-2.5 text-white/30" />;
-    if (status === 'delivered') return <CheckCheck className="w-3 h-3 text-white/50" />;
-    return                              <CheckCheck className="w-3 h-3 text-emerald-300" />;
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (e.target.value.length > CHAR_LIMIT) return;
+    setInputText(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+    if (!socket) return;
+    socket.emit('typing-start', { roomId });
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => socket.emit('typing-stop', { roomId }), 2000);
   };
 
-  const charsLeft   = CHAR_LIMIT - inputText.length;
-  const isNearLimit = charsLeft <= 30;
+  const Tick = ({ s }: { s: Status }) => (
+    s === 'sending'   ? <Clock      className="w-2.5 h-2.5 text-white/30" /> :
+    s === 'delivered' ? <CheckCheck className="w-3 h-3 text-white/50" />     :
+                        <CheckCheck className="w-3 h-3 text-emerald-300" />
+  );
+
+  const charsLeft = CHAR_LIMIT - inputText.length;
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden"
-         style={{ background: 'linear-gradient(180deg, #0a0a0a 0%, #0d0d0d 100%)' }}>
+    <div className="flex flex-col h-full w-full overflow-hidden select-none"
+         style={{ background: '#111214' }}>
 
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 sm:px-3"
-        style={{ WebkitOverflowScrolling: 'touch' }}
-        onMouseDown={() => setActiveMenuId(null)}
-      >
+      <div ref={scrollRef}
+           className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-3 pt-4 pb-2"
+           style={{ WebkitOverflowScrolling: 'touch' }}
+           onMouseDown={() => setMenuId(null)}>
+
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20
-                            flex items-center justify-center shadow-lg shadow-emerald-500/10">
-              <span className="text-xl">🔒</span>
-            </div>
-            <p className="text-[10px] font-bold tracking-[0.25em] uppercase text-neutral-600">
+          <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30
+                            flex items-center justify-center text-lg">🔒</div>
+            <p className="text-[10px] text-neutral-500 font-medium tracking-widest uppercase">
               End-to-end encrypted
             </p>
-            <p className="text-[9px] text-neutral-700 tracking-wide">
-              Swipe right on any message to reply
-            </p>
+            <p className="text-[9px] text-neutral-600">Swipe → any message to reply</p>
           </div>
         )}
 
-        <div className="space-y-0.5">
-          {messages.map((msg, idx) => {
-            const isMine    = msg.sender === currentUserId;
-            const isMenu    = activeMenuId === msg.id;
-            const sw        = swipeStates[msg.id];
-            const swipeDx   = sw?.dx ?? 0;
-            const prevMsg   = idx > 0 ? messages[idx - 1] : null;
-            const isGrouped = prevMsg && prevMsg.sender === msg.sender &&
-                              msg.timestamp - prevMsg.timestamp < 60_000;
+        {messages.map((msg, idx) => {
+          const mine     = msg.sender === currentUserId;
+          const prev     = idx > 0 ? messages[idx - 1] : null;
+          const grouped  = !!(prev && prev.sender === msg.sender && msg.timestamp - prev.timestamp < 60_000);
+          const isActive = menuId === msg.id;
+          const swDx     = swipes[msg.id]?.dx ?? 0;
+          const isFlash  = flashId === msg.id;
 
-            return (
+          return (
+            <div
+              key={msg.id}
+              ref={el => { msgRefs.current[msg.id] = el; }}
+              className={`flex w-full ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-0.5' : 'mt-3'}`}
+            >
               <div
-                key={msg.id}
-                className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}
-                            ${isGrouped ? 'mt-0.5' : 'mt-3'}`}
+                className="relative"
+                style={{
+                  maxWidth: '80%',
+                  transform:  `translateX(${swDx}px)`,
+                  transition: swipes[msg.id]?.active ? 'none' : 'transform 0.28s cubic-bezier(.34,1.56,.64,1)',
+                }}
+                onTouchStart={e => swipeStart(msg.id, e)}
+                onTouchMove={e  => swipeMove(msg.id, e)}
+                onTouchEnd={() => swipeEnd(msg.id, msg)}
               >
-                <div
-                  className="relative"
-                  style={{
-                    transform: `translateX(${swipeDx}px)`,
-                    transition: sw?.active ? 'none' : 'transform 0.25s cubic-bezier(.34,1.56,.64,1)',
-                    maxWidth: '82%',
-                  }}
-                  onTouchStart={e => onTouchStart(msg.id, e)}
-                  onTouchMove={e  => onTouchMove(msg.id, e)}
-                  onTouchEnd={() => onTouchEnd(msg.id, msg)}
-                >
-                  {/* Swipe reply arrow */}
-                  {swipeDx > 8 && (
-                    <div
-                      className="absolute -left-8 top-1/2 -translate-y-1/2 flex items-center justify-center"
-                      style={{ opacity: Math.min(swipeDx / SWIPE_THRESHOLD, 1) }}
-                    >
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center
-                                       bg-emerald-500/20 border border-emerald-500/40
-                                       ${swipeDx >= SWIPE_THRESHOLD ? 'scale-110' : 'scale-100'}
-                                       transition-transform`}>
-                        <Reply className="w-3 h-3 text-emerald-400" />
-                      </div>
+                {swDx > 6 && (
+                  <motion.div
+                    className="absolute -left-9 top-1/2 -translate-y-1/2"
+                    style={{ opacity: Math.min(swDx / SWIPE_THRESHOLD, 1) }}
+                  >
+                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center
+                                     bg-emerald-500/15 border-emerald-500/40
+                                     transition-transform duration-100
+                                     ${swDx >= SWIPE_THRESHOLD ? 'scale-125' : 'scale-100'}`}>
+                      <Reply className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
-                  )}
+                  </motion.div>
+                )}
 
-                  {/* Reply preview */}
-                  {msg.replyTo && (
-                    <div className={`flex mb-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`
-                        max-w-full px-2.5 py-1.5 rounded-xl text-[10px] leading-snug
-                        border-l-2 border-emerald-500
-                        ${isMine
-                          ? 'bg-emerald-950/60 text-emerald-200/60 rounded-tr-sm'
-                          : 'bg-white/5 text-neutral-400 rounded-tl-sm'}
-                      `}>
-                        <div className="text-[9px] font-semibold text-emerald-400 uppercase tracking-wider mb-0.5">
-                          {msg.replyTo.sender === currentUserId ? 'You' : 'Stranger'}
-                        </div>
-                        <div className="truncate max-w-[200px] text-[10px]">{msg.replyTo.text}</div>
-                      </div>
-                    </div>
-                  )}
+                <div className={`flex items-end gap-2 group/row
+                                 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
 
-                  {/* Bubble row */}
-                  <div className={`flex items-end gap-1.5 group/row
-                                   ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-
-                    {/* Desktop action buttons */}
-                    <div className={`
-                      hidden sm:flex flex-col gap-1 shrink-0 mb-0.5
-                      opacity-0 group-hover/row:opacity-100
-                      transition-all duration-150
-                      ${isMine ? 'order-last' : 'order-first'}
-                    `}>
-                      {!isMine && (
-                        <button
-                          onMouseDown={e => { e.stopPropagation(); openMenu(msg.id, e); }}
-                          className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700
-                                     border border-neutral-700 hover:border-emerald-500/40
-                                     flex items-center justify-center
-                                     transition-all hover:scale-110 active:scale-95"
-                          title="React"
-                        >
-                          <Smile className="w-3.5 h-3.5 text-neutral-400" />
-                        </button>
-                      )}
+                  <div className={`hidden sm:flex flex-col gap-1 shrink-0 mb-1
+                                   opacity-0 group-hover/row:opacity-100
+                                   transition-opacity duration-150
+                                   ${mine ? 'order-last' : 'order-first'}`}>
+                    {!mine && (
                       <button
-                        onMouseDown={e => {
-                          e.stopPropagation();
-                          setReplyingTo(msg);
-                          inputRef.current?.focus();
-                        }}
-                        className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700
-                                   border border-neutral-700 hover:border-emerald-500/40
-                                   flex items-center justify-center
+                        onMouseDown={e => { e.stopPropagation(); openMenu(msg.id, e); }}
+                        className="w-7 h-7 rounded-full bg-[#1e2025] hover:bg-[#2a2d34]
+                                   border border-white/8 hover:border-emerald-500/30
+                                   flex items-center justify-center cursor-pointer
                                    transition-all hover:scale-110 active:scale-95"
-                        title="Reply"
+                        title="React"
                       >
-                        <Reply className="w-3.5 h-3.5 text-neutral-400" />
+                        <Smile className="w-3.5 h-3.5 text-neutral-500" />
                       </button>
-                    </div>
-
-                    {/* Bubble */}
-                    <div
-                      ref={el => { bubbleRefs.current[msg.id] = el; }}
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={e => {
-                        if (window.innerWidth < 640) openMenu(msg.id, e);
-                      }}
-                      className={`
-                        relative px-3 py-2 select-none cursor-pointer
-                        text-sm leading-relaxed break-words
-                        transition-all duration-150
-                        ${isMine
-                          ? 'bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-lg shadow-emerald-900/40 rounded-2xl rounded-tr-md'
-                          : 'bg-gradient-to-br from-neutral-800 to-neutral-800/80 text-neutral-100 shadow-lg shadow-black/30 border border-white/5 rounded-2xl rounded-tl-md'
-                        }
-                        ${isMenu ? (isMine ? 'ring-1 ring-emerald-400/30' : 'ring-1 ring-white/10') : ''}
-                        active:opacity-80
-                      `}
+                    )}
+                    <button
+                      onMouseDown={e => { e.stopPropagation(); setReplyingTo(msg); inputRef.current?.focus(); }}
+                      className="w-7 h-7 rounded-full bg-[#1e2025] hover:bg-[#2a2d34]
+                                 border border-white/8 hover:border-emerald-500/30
+                                 flex items-center justify-center cursor-pointer
+                                 transition-all hover:scale-110 active:scale-95"
+                      title="Reply"
                     >
-                      {isMine && (
-                        <div className="absolute inset-0 rounded-2xl rounded-tr-md
-                                        bg-gradient-to-br from-white/10 to-transparent
-                                        pointer-events-none" />
-                      )}
-
-                      <span className="relative z-10">{msg.text}</span>
-
-                      <div className={`flex items-center gap-1 mt-1
-                                       ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <span className={`text-[9px] ${isMine ? 'text-white/40' : 'text-neutral-600'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {isMine && <StatusIcon status={msg.status} />}
-                      </div>
-
-                      {msg.reaction && (
-                        <div className={`
-                          absolute -bottom-4 text-sm leading-none z-20
-                          bg-neutral-900 border border-neutral-700/80
-                          rounded-full px-1.5 py-0.5 shadow-xl
-                          ${isMine ? '-left-1' : '-right-1'}
-                        `}>
-                          {msg.reaction}
-                        </div>
-                      )}
-                    </div>
+                      <Reply className="w-3.5 h-3.5 text-neutral-500" />
+                    </button>
                   </div>
 
-                  {/* Context menu */}
-                  <AnimatePresence>
-                    {isMenu && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.88, y: menuAbove ? 6 : -6 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.88 }}
-                        transition={{ duration: 0.15, ease: [0.34, 1.56, 0.64, 1] }}
-                        onMouseDown={e => e.stopPropagation()}
-                        onClick={e => e.stopPropagation()}
-                        className={`
-                          absolute z-50 min-w-[180px]
-                          bg-neutral-900/95 backdrop-blur-xl
-                          border border-white/10
-                          rounded-2xl shadow-2xl shadow-black/60
-                          overflow-hidden
-                          ${isMine ? 'right-0' : 'left-0'}
-                          ${menuAbove ? 'bottom-full mb-2' : 'top-full mt-2'}
-                        `}
-                      >
-                        {!isMine && (
-                          <div className="flex gap-0.5 px-2 py-2 border-b border-white/8">
-                            {REACTIONS.map(emoji => (
-                              <button
-                                key={emoji}
-                                onClick={() => sendReaction(msg.id, emoji)}
-                                className="w-8 h-8 flex items-center justify-center rounded-xl
-                                           text-lg hover:bg-white/10 active:scale-90
-                                           transition-all duration-100"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        <button
-                          onClick={() => {
-                            setReplyingTo(msg);
-                            setActiveMenuId(null);
-                            setTimeout(() => inputRef.current?.focus(), 60);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-3
-                                     hover:bg-white/8 active:bg-white/12
-                                     transition-colors text-left"
-                        >
-                          <div className="w-7 h-7 rounded-full bg-emerald-500/15
-                                          flex items-center justify-center shrink-0">
-                            <Reply className="w-3.5 h-3.5 text-emerald-400" />
-                          </div>
-                          <span className="text-xs font-semibold text-neutral-200 tracking-wide">
-                            Reply
-                          </span>
-                        </button>
-                      </motion.div>
+                  <motion.div
+                    ref={el => { bubbleRefs.current[msg.id] = el; }}
+                    initial={{ opacity: 0, scale: 0.92, y: 6, x: mine ? 10 : -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                    transition={{ duration: 0.18, ease: [0.34, 1.2, 0.64, 1] }}
+                    onMouseDown={e => e.stopPropagation()}
+                    onMouseEnter={() => {}}
+                    onClick={e => {
+                      if (window.innerWidth < 640) { triggerRipple(msg.id, e); openMenu(msg.id, e); }
+                    }}
+                    onTouchStart={e => triggerRipple(msg.id, e)}
+                    className={`relative overflow-hidden rounded-2xl
+                      ${mine  ? 'rounded-tr-sm' : 'rounded-tl-sm'}
+                      ${mine
+                        ? 'bg-[#2b5c3f] text-white shadow-md shadow-emerald-950/50'
+                        : 'bg-[#1e2026] text-[#e8eaf0] shadow-md shadow-black/40 border border-white/[0.06]'}
+                      ${isActive ? 'brightness-110' : ''}
+                      ${isFlash ? 'ring-2 ring-emerald-400/60' : ''}
+                      cursor-pointer transition-[filter,box-shadow] duration-150 pb-1
+                    `}
+                    style={{
+                      background: isFlash
+                        ? mine ? '#3a7a55' : '#2c3040'
+                        : undefined,
+                    }}
+                  >
+                    {ripple?.id === msg.id && (
+                      <motion.span
+                        className="absolute rounded-full bg-white/15 pointer-events-none"
+                        style={{ width: 8, height: 8, left: ripple.x - 4, top: ripple.y - 4 }}
+                        initial={{ scale: 0, opacity: 0.6 }}
+                        animate={{ scale: 22, opacity: 0 }}
+                        transition={{ duration: 0.45, ease: 'easeOut' }}
+                      />
                     )}
-                  </AnimatePresence>
-                </div>
-              </div>
-            );
-          })}
-        </div>
 
-        {/* Typing indicator */}
+                    {msg.replyTo && (
+                      <div
+                        className={`mx-2 mt-2 mb-1 px-2.5 py-1.5 rounded-xl cursor-pointer
+                                    border-l-[3px] border-emerald-500
+                                    ${mine ? 'bg-black/20' : 'bg-black/25'}
+                                    hover:brightness-125 transition-all`}
+                        onClick={e => { e.stopPropagation(); scrollToMsg(msg.replyTo!.id); }}
+                      >
+                        <p className="text-[9px] font-semibold text-emerald-400 mb-0.5 tracking-wide">
+                          {msg.replyTo.sender === currentUserId ? 'You' : 'Stranger'}
+                        </p>
+                        <p className="text-[11px] text-white/50 truncate leading-snug">
+                          {msg.replyTo.text}
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="px-3 pt-1.5 text-[13.5px] leading-[1.5] break-words relative z-10">
+                      {msg.text}
+                    </p>
+
+                    <div className={`flex items-center gap-1 px-2.5 pb-1.5 mt-0.5
+                                     ${mine ? 'justify-end' : 'justify-start'}`}>
+                      <span className={`text-[10px] ${mine ? 'text-white/30' : 'text-white/20'}`}>
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {mine && <Tick s={msg.status} />}
+                    </div>
+
+                    <AnimatePresence>
+                      {msg.reaction && (
+                        <motion.div
+                          key={msg.reaction}
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: newReactionId === msg.id ? [0, 1.4, 1] : 1, opacity: 1 }}
+                          exit={{ scale: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: 'backOut' }}
+                          className={`absolute -bottom-3.5 text-sm leading-none
+                                      bg-[#1a1c22] border border-white/10
+                                      rounded-full px-1.5 py-0.5 shadow-lg z-20
+                                      ${mine ? 'right-2' : 'left-2'}`}
+                        >
+                          {msg.reaction}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </div>
+
+                <AnimatePresence>
+                  {isActive && (
+                    <motion.div
+                      key="menu"
+                      initial={{ opacity: 0, scale: 0.85, y: menuFlip ? 8 : -8 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.85 }}
+                      transition={{ duration: 0.16, ease: [0.34, 1.4, 0.64, 1] }}
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      className={`absolute z-50 min-w-[190px]
+                                  rounded-2xl overflow-hidden
+                                  shadow-2xl shadow-black/70
+                                  border border-white/[0.08]
+                                  ${mine ? 'right-0' : 'left-0'}
+                                  ${menuFlip ? 'bottom-full mb-2' : 'top-full mt-2'}`}
+                      style={{ background: '#1e2128' }}
+                    >
+                      {!mine && (
+                        <div className="flex items-center gap-0.5 px-2 py-2.5
+                                        border-b border-white/[0.07]">
+                          {REACTIONS.map(e => (
+                            <button key={e} onClick={() => react(msg.id, e)}
+                              className="w-9 h-9 flex items-center justify-center rounded-xl
+                                         text-[1.25rem] hover:bg-white/10 active:scale-90
+                                         transition-all duration-100 cursor-pointer">
+                              {e}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => {
+                          setReplyingTo(msg); setMenuId(null);
+                          setTimeout(() => inputRef.current?.focus(), 60);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3
+                                   hover:bg-white/[0.07] active:bg-white/10
+                                   transition-colors cursor-pointer"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-emerald-500/15
+                                        flex items-center justify-center shrink-0">
+                          <Reply className="w-3.5 h-3.5 text-emerald-400" />
+                        </div>
+                        <span className="text-[13px] font-medium text-neutral-200">Reply</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          );
+        })}
+
         <AnimatePresence>
-          {isPartnerTyping && (
+          {partnerTyping && (
             <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
-              className="flex justify-start mt-3 ml-2"
+              initial={{ opacity: 0, y: 8, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              className="flex justify-start mt-3"
             >
-              <div className="px-4 py-3 bg-neutral-800 border border-white/5
-                              rounded-2xl rounded-tl-md shadow-lg">
-                <div className="flex gap-1 items-center">
+              <div className="px-4 py-3 rounded-2xl rounded-tl-sm shadow-md"
+                   style={{ background: '#1e2026', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex gap-1 items-end h-3">
                   {[0, 1, 2].map(i => (
-                    <motion.span
-                      key={i}
-                      animate={{ y: [0, -4, 0] }}
-                      transition={{ duration: 0.55, repeat: Infinity, delay: i * 0.13, ease: 'easeInOut' }}
+                    <motion.span key={i}
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
                       className="block w-1.5 h-1.5 rounded-full bg-neutral-500"
                     />
                   ))}
@@ -474,89 +464,78 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div className="h-2" />
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-white/5"
-           style={{ background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(20px)' }}>
+      <div className="shrink-0" style={{ background: '#161719', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
 
-        {/* Reply bar */}
         <AnimatePresence>
           {replyingTo && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="px-3 pt-2.5"
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden"
             >
-              <div className="flex items-center gap-2.5
-                              bg-white/5 border border-white/8 border-l-2 border-l-emerald-500
-                              rounded-xl px-3 py-2">
+              <div className="flex items-center gap-3 px-4 pt-3 pb-1">
+                <div className="w-0.5 self-stretch rounded-full bg-emerald-500" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-0.5">
+                  <p className="text-[10px] font-semibold text-emerald-400 mb-0.5">
                     {replyingTo.sender === currentUserId ? 'You' : 'Stranger'}
-                  </div>
-                  <div className="text-[11px] text-neutral-400 truncate">{replyingTo.text}</div>
+                  </p>
+                  <p className="text-[11px] text-neutral-500 truncate">{replyingTo.text}</p>
                 </div>
-                <button
-                  onClick={() => setReplyingTo(null)}
-                  className="shrink-0 w-5 h-5 rounded-full bg-white/10 hover:bg-white/20
-                             flex items-center justify-center transition-colors"
-                >
-                  <X className="w-2.5 h-2.5 text-neutral-400" />
+                <button onClick={() => setReplyingTo(null)}
+                  className="shrink-0 w-6 h-6 rounded-full bg-white/8 hover:bg-white/15
+                             flex items-center justify-center transition-colors cursor-pointer">
+                  <X className="w-3 h-3 text-neutral-500" />
                 </button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Input row */}
         <div className="flex items-end gap-2 px-3 py-2.5">
-          <div className="flex-1 flex items-end gap-2
-                          bg-white/6 border border-white/10
-                          rounded-2xl px-3 py-2
-                          focus-within:border-emerald-500/40
-                          focus-within:bg-white/8
-                          transition-all duration-200">
+          <div className="flex-1 flex items-end gap-2 px-3 py-2 rounded-[22px] transition-all duration-200"
+               style={{ background: '#23262e', border: '1px solid rgba(255,255,255,0.07)' }}>
             <textarea
               ref={inputRef}
               value={inputText}
-              onChange={handleInputChange}
+              onChange={handleInput}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey && window.innerWidth >= 640) {
-                  e.preventDefault();
-                  sendMessage();
+                  e.preventDefault(); send();
                 }
               }}
               placeholder="Message…"
               rows={1}
-              style={{ maxHeight: '120px', minHeight: '22px' }}
-              className="flex-1 bg-transparent text-white text-sm leading-relaxed
-                         focus:outline-none placeholder:text-neutral-600
-                         resize-none overflow-y-auto"
+              style={{ maxHeight: 120, minHeight: 22 }}
+              className="flex-1 bg-transparent text-[13.5px] text-white leading-relaxed
+                         focus:outline-none placeholder:text-neutral-600 resize-none overflow-y-auto"
             />
-            {isNearLimit && (
+            {charsLeft <= 30 && (
               <span className={`text-[9px] font-mono self-end mb-0.5 shrink-0
-                               ${charsLeft <= 10 ? 'text-red-400' : 'text-yellow-500/80'}`}>
+                               ${charsLeft <= 10 ? 'text-red-400' : 'text-yellow-500/60'}`}>
                 {charsLeft}
               </span>
             )}
           </div>
 
-          <button
+          <motion.button
             onMouseDown={e => e.preventDefault()}
-            onClick={() => { sendMessage(); inputRef.current?.focus(); }}
+            onClick={() => { send(); inputRef.current?.focus(); }}
             disabled={!inputText.trim()}
-            className={`
-              shrink-0 w-10 h-10 rounded-full flex items-center justify-center
-              transition-all duration-150
-              ${inputText.trim()
-                ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-900/50 hover:from-emerald-400 hover:to-emerald-500 active:scale-95'
-                : 'bg-white/6 border border-white/10 opacity-40 cursor-not-allowed'}
-            `}
+            whileTap={{ scale: 0.88 }}
+            className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center
+                        transition-all duration-200 cursor-pointer
+                        ${inputText.trim()
+                          ? 'bg-emerald-500 shadow-lg shadow-emerald-900/60 hover:bg-emerald-400'
+                          : 'bg-[#23262e] border border-white/8 opacity-40 cursor-not-allowed'}`}
           >
             <Send className="w-4 h-4 text-white" strokeWidth={2.5} />
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>
