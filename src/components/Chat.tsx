@@ -2,10 +2,9 @@ import React, {
   useState, useEffect, useRef, useCallback, useLayoutEffect
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Reply, X, Check, CheckCheck, Clock, Smile } from 'lucide-react';
+import { Send, Reply, X, CheckCheck, Clock, Smile, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// ─────────────────────────────────────────────────────────────────────────────
 const CHAR_LIMIT      = 200;
 const SWIPE_THRESHOLD = 58;
 const REACTIONS       = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
@@ -33,41 +32,60 @@ interface ChatProps {
   currentUserId: string;
   onNewMessage?: () => void;
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const Chat: React.FC<ChatProps> = ({
   socket, roomId, currentUserId, onNewMessage
 }) => {
-  const [messages,        setMessages]        = useState<Message[]>([]);
-  const [inputText,       setInputText]        = useState('');
-  const [partnerTyping,   setPartnerTyping]    = useState(false);
-  const [replyingTo,      setReplyingTo]       = useState<Message | null>(null);
-  const [menuId,          setMenuId]           = useState<string | null>(null);
-  const [menuFlip,        setMenuFlip]         = useState(false);
-  const [menuPos,         setMenuPos]          = useState<{ x: number; y: number; width: number } | null>(null);
-  const [flashId,         setFlashId]          = useState<string | null>(null);
-  const [ripple,          setRipple]           = useState<{ id: string; x: number; y: number } | null>(null);
-  const [swipes,          setSwipes]           = useState<Record<string, Swipe>>({});
-  const [newReactionId,   setNewReactionId]    = useState<string | null>(null);
+  const [messages,      setMessages]      = useState<Message[]>([]);
+  const [inputText,     setInputText]     = useState('');
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const [replyingTo,    setReplyingTo]    = useState<Message | null>(null);
+  const [menuId,        setMenuId]        = useState<string | null>(null);
+  const [menuFlip,      setMenuFlip]      = useState(false);
+  const [menuPos,       setMenuPos]       = useState<{ x: number; y: number; width: number } | null>(null);
+  const [flashId,       setFlashId]       = useState<string | null>(null);
+  const [ripple,        setRipple]        = useState<{ id: string; x: number; y: number } | null>(null);
+  const [swipes,        setSwipes]        = useState<Record<string, Swipe>>({});
+  const [newReactionId, setNewReactionId] = useState<string | null>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  const scrollRef   = useRef<HTMLDivElement>(null);
-  const inputRef    = useRef<HTMLTextAreaElement>(null);
-  const typingTimer = useRef<NodeJS.Timeout | null>(null);
-  const bubbleRefs  = useRef<Record<string, HTMLDivElement | null>>({});
-  const msgRefs     = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollRef    = useRef<HTMLDivElement>(null);
+  const inputRef     = useRef<HTMLTextAreaElement>(null);
+  const typingTimer  = useRef<NodeJS.Timeout | null>(null);
+  const bubbleRefs   = useRef<Record<string, HTMLDivElement | null>>({});
+  const msgRefs      = useRef<Record<string, HTMLDivElement | null>>({});
+  const isAtBottom   = useRef(true);
 
-  useLayoutEffect(() => {
+  const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, partnerTyping]);
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isAtBottom.current = distFromBottom < 60;
+    setShowScrollBtn(distFromBottom > 120);
+  };
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    setShowScrollBtn(false);
+    isAtBottom.current = true;
+  };
+
+  useLayoutEffect(() => {
+    if (isAtBottom.current) scrollToBottom('smooth');
+  }, [messages]);
 
   useEffect(() => {
-    const close = () => setMenuId(null);
-    document.addEventListener('mousedown',  close);
+    const close = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-portal-menu]')) return;
+      setMenuId(null);
+    };
+    document.addEventListener('mousedown', close);
     document.addEventListener('touchstart', close);
     return () => {
-      document.removeEventListener('mousedown',  close);
+      document.removeEventListener('mousedown', close);
       document.removeEventListener('touchstart', close);
     };
   }, []);
@@ -123,16 +141,17 @@ export const Chat: React.FC<ChatProps> = ({
     setMessages(p => [...p, msg]);
     setInputText('');
     setReplyingTo(null);
+    isAtBottom.current = true;
     if (inputRef.current) { inputRef.current.style.height = 'auto'; inputRef.current.focus(); }
   }, [inputText, socket, roomId, currentUserId, replyingTo]);
 
-  const react = (messageId: string, emoji: string) => {
+  const react = useCallback((messageId: string, emoji: string) => {
     socket.emit('message-reaction', { roomId, messageId, emoji });
     setMessages(p => p.map(m => m.id === messageId ? { ...m, reaction: emoji } : m));
     setNewReactionId(messageId);
     setTimeout(() => setNewReactionId(null), 600);
     setMenuId(null);
-  };
+  }, [socket, roomId]);
 
   const scrollToMsg = (id: string) => {
     const el = msgRefs.current[id];
@@ -148,13 +167,9 @@ export const Chat: React.FC<ChatProps> = ({
     if (el) {
       const r = el.getBoundingClientRect();
       const spaceBelow = window.innerHeight - r.bottom;
-      const flip = spaceBelow < 190;
+      const flip = spaceBelow < 200;
       setMenuFlip(flip);
-      setMenuPos({
-        x: r.left,
-        y: flip ? r.top + window.scrollY : r.bottom + window.scrollY,
-        width: r.width,
-      });
+      setMenuPos({ x: r.left, y: flip ? r.top : r.bottom, width: r.width });
     }
     setMenuId(p => p === id ? null : id);
   };
@@ -188,8 +203,7 @@ export const Chat: React.FC<ChatProps> = ({
       return;
     }
     const cdx = Math.max(0, Math.min(dx, SWIPE_THRESHOLD + 16));
-    const hit  = !s.triggered && cdx >= SWIPE_THRESHOLD;
-    if (hit && navigator.vibrate) navigator.vibrate(28);
+    if (!s.triggered && cdx >= SWIPE_THRESHOLD && navigator.vibrate) navigator.vibrate(28);
     setSwipes(p => ({ ...p, [id]: { ...s, dx: cdx, triggered: s.triggered || cdx >= SWIPE_THRESHOLD } }));
   };
   const swipeEnd = (id: string, msg: Message) => {
@@ -224,11 +238,17 @@ export const Chat: React.FC<ChatProps> = ({
     <div className="flex flex-col h-full w-full overflow-hidden select-none"
          style={{ background: '#111214' }}>
 
-      <div ref={scrollRef}
-           className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-3 pt-4 pb-2"
-           style={{ WebkitOverflowScrolling: 'touch' }}
-           onMouseDown={() => setMenuId(null)}>
-
+      {/* scroll area */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-3 pt-4 pb-2 relative"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+        onScroll={handleScroll}
+        onMouseDown={e => {
+          const target = e.target as HTMLElement;
+          if (!target.closest('[data-portal-menu]')) setMenuId(null);
+        }}
+      >
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40">
             <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30
@@ -241,18 +261,20 @@ export const Chat: React.FC<ChatProps> = ({
         )}
 
         {messages.map((msg, idx) => {
-          const mine     = msg.sender === currentUserId;
-          const prev     = idx > 0 ? messages[idx - 1] : null;
-          const grouped  = !!(prev && prev.sender === msg.sender && msg.timestamp - prev.timestamp < 60_000);
+          const mine    = msg.sender === currentUserId;
+          const prev    = idx > 0 ? messages[idx - 1] : null;
+          const grouped = !!(prev && prev.sender === msg.sender && msg.timestamp - prev.timestamp < 60_000);
           const isActive = menuId === msg.id;
-          const swDx     = swipes[msg.id]?.dx ?? 0;
-          const isFlash  = flashId === msg.id;
+          const swDx    = swipes[msg.id]?.dx ?? 0;
+          const isFlash = flashId === msg.id;
 
           return (
             <div
               key={msg.id}
               ref={el => { msgRefs.current[msg.id] = el; }}
-              className={`flex w-full ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-0.5' : 'mt-3'} ${msg.reaction ? 'mb-4' : ''}`}
+              className={`flex w-full ${mine ? 'justify-end' : 'justify-start'}
+                          ${grouped ? 'mt-0.5' : 'mt-3'}
+                          ${msg.reaction ? 'mb-5' : 'mb-0.5'}`}
             >
               <div
                 className="relative"
@@ -271,20 +293,17 @@ export const Chat: React.FC<ChatProps> = ({
                     style={{ opacity: Math.min(swDx / SWIPE_THRESHOLD, 1) }}
                   >
                     <div className={`w-7 h-7 rounded-full border flex items-center justify-center
-                                     bg-emerald-500/15 border-emerald-500/40
-                                     transition-transform duration-100
+                                     bg-emerald-500/15 border-emerald-500/40 transition-transform duration-100
                                      ${swDx >= SWIPE_THRESHOLD ? 'scale-125' : 'scale-100'}`}>
                       <Reply className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
                   </motion.div>
                 )}
 
-                <div className={`flex items-end gap-2 group/row
-                                 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+                <div className={`flex items-end gap-2 group/row ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
 
                   <div className={`hidden sm:flex flex-col gap-1 shrink-0 mb-1
-                                   opacity-0 group-hover/row:opacity-100
-                                   transition-opacity duration-150
+                                   opacity-0 group-hover/row:opacity-100 transition-opacity duration-150
                                    ${mine ? 'order-last' : 'order-first'}`}>
                     {!mine && (
                       <button
@@ -321,7 +340,7 @@ export const Chat: React.FC<ChatProps> = ({
                       if (window.innerWidth < 640) { triggerRipple(msg.id, e); openMenu(msg.id, e); }
                     }}
                     onTouchStart={e => triggerRipple(msg.id, e)}
-                    className={`relative overflow-hidden rounded-2xl
+                    className={`relative rounded-2xl
                       ${mine  ? 'rounded-tr-sm' : 'rounded-tl-sm'}
                       ${mine
                         ? 'bg-[#2b5c3f] text-white shadow-md shadow-emerald-950/50'
@@ -331,20 +350,22 @@ export const Chat: React.FC<ChatProps> = ({
                       cursor-pointer transition-[filter,box-shadow] duration-150 pb-1
                     `}
                     style={{
-                      background: isFlash
-                        ? mine ? '#3a7a55' : '#2c3040'
-                        : undefined,
+                      background: isFlash ? (mine ? '#3a7a55' : '#2c3040') : undefined,
+                      overflow: 'visible',
                     }}
                   >
-                    {ripple?.id === msg.id && (
-                      <motion.span
-                        className="absolute rounded-full bg-white/15 pointer-events-none"
-                        style={{ width: 8, height: 8, left: ripple.x - 4, top: ripple.y - 4 }}
-                        initial={{ scale: 0, opacity: 0.6 }}
-                        animate={{ scale: 22, opacity: 0 }}
-                        transition={{ duration: 0.45, ease: 'easeOut' }}
-                      />
-                    )}
+                    {/* ripple clipped inside inner div */}
+                    <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+                      {ripple?.id === msg.id && (
+                        <motion.span
+                          className="absolute rounded-full bg-white/15"
+                          style={{ width: 8, height: 8, left: ripple.x - 4, top: ripple.y - 4 }}
+                          initial={{ scale: 0, opacity: 0.6 }}
+                          animate={{ scale: 22, opacity: 0 }}
+                          transition={{ duration: 0.45, ease: 'easeOut' }}
+                        />
+                      )}
+                    </div>
 
                     {msg.replyTo && (
                       <div
@@ -383,9 +404,9 @@ export const Chat: React.FC<ChatProps> = ({
                           animate={{ scale: newReactionId === msg.id ? [0, 1.4, 1] : 1, opacity: 1 }}
                           exit={{ scale: 0, opacity: 0 }}
                           transition={{ duration: 0.3, ease: 'backOut' }}
-                          className={`absolute -bottom-3.5 text-sm leading-none
+                          className={`absolute -bottom-5 text-sm leading-none z-30
                                       bg-[#1a1c22] border border-white/10
-                                      rounded-full px-1.5 py-0.5 shadow-lg z-20
+                                      rounded-full px-1.5 py-0.5 shadow-lg
                                       ${mine ? 'right-2' : 'left-2'}`}
                         >
                           {msg.reaction}
@@ -427,65 +448,95 @@ export const Chat: React.FC<ChatProps> = ({
         <div className="h-2" />
       </div>
 
-      {/* Portal context menu — rendered into document.body, always on top */}
+      {/* Scroll-to-bottom button */}
+      <AnimatePresence>
+        {showScrollBtn && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 8 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => scrollToBottom('smooth')}
+            className="absolute bottom-[72px] right-4 z-40
+                       w-9 h-9 rounded-full flex items-center justify-center
+                       bg-[#2b5c3f] border border-emerald-500/30
+                       shadow-lg shadow-black/40 cursor-pointer
+                       hover:bg-emerald-600 transition-colors"
+            style={{ position: 'absolute' }}
+          >
+            <ChevronDown className="w-4 h-4 text-white" />
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Portal context menu */}
       {menuId && menuPos && (() => {
         const activeMsg = messages.find(m => m.id === menuId);
         if (!activeMsg) return null;
         const isMinePortal = activeMsg.sender === currentUserId;
-        const menuWidth = 190;
+        const menuWidth = 196;
         const rawX = isMinePortal
           ? menuPos.x + menuPos.width - menuWidth
           : menuPos.x;
         const clampedX = Math.max(8, Math.min(rawX, window.innerWidth - menuWidth - 8));
         const posStyle: React.CSSProperties = menuFlip
-          ? { position: 'fixed', left: clampedX, bottom: window.innerHeight - menuPos.y + 4, zIndex: 9999 }
-          : { position: 'fixed', left: clampedX, top: menuPos.y + 4, zIndex: 9999 };
+          ? { position: 'fixed', left: clampedX, bottom: window.innerHeight - menuPos.y + 6, zIndex: 99999 }
+          : { position: 'fixed', left: clampedX, top: menuPos.y + 6, zIndex: 99999 };
+
         return createPortal(
-          <AnimatePresence>
-            <motion.div
-              key="portal-menu"
-              initial={{ opacity: 0, scale: 0.85, y: menuFlip ? 6 : -6 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.85 }}
-              transition={{ duration: 0.16, ease: [0.34, 1.4, 0.64, 1] }}
-              onMouseDown={e => e.stopPropagation()}
-              onClick={e => e.stopPropagation()}
-              style={{ ...posStyle, minWidth: menuWidth, background: '#1e2128' }}
-              className="rounded-2xl overflow-hidden shadow-2xl shadow-black/80 border border-white/[0.08]"
+          <motion.div
+            data-portal-menu="true"
+            initial={{ opacity: 0, scale: 0.85, y: menuFlip ? 6 : -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.16, ease: [0.34, 1.4, 0.64, 1] }}
+            style={{ ...posStyle, minWidth: menuWidth, background: '#1e2128' }}
+            className="rounded-2xl overflow-hidden shadow-2xl shadow-black/80 border border-white/[0.08]"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            {!isMinePortal && (
+              <div className="flex items-center gap-0.5 px-2 py-2.5 border-b border-white/[0.07]">
+                {REACTIONS.map(emoji => (
+                  <button
+                    key={emoji}
+                    onPointerDown={e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      react(activeMsg.id, emoji);
+                    }}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl
+                               text-[1.25rem] hover:bg-white/10 active:scale-90
+                               transition-all duration-100 cursor-pointer"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onPointerDown={e => {
+                e.stopPropagation();
+                e.preventDefault();
+                setReplyingTo(activeMsg);
+                setMenuId(null);
+                setTimeout(() => inputRef.current?.focus(), 60);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3
+                         hover:bg-white/[0.07] active:bg-white/10
+                         transition-colors cursor-pointer"
             >
-              {!isMinePortal && (
-                <div className="flex items-center gap-0.5 px-2 py-2.5 border-b border-white/[0.07]">
-                  {REACTIONS.map(e => (
-                    <button key={e} onClick={() => react(activeMsg.id, e)}
-                      className="w-9 h-9 flex items-center justify-center rounded-xl
-                                 text-[1.25rem] hover:bg-white/10 active:scale-90
-                                 transition-all duration-100 cursor-pointer">
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  setReplyingTo(activeMsg); setMenuId(null);
-                  setTimeout(() => inputRef.current?.focus(), 60);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3
-                           hover:bg-white/[0.07] active:bg-white/10
-                           transition-colors cursor-pointer"
-              >
-                <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                  <Reply className="w-3.5 h-3.5 text-emerald-400" />
-                </div>
-                <span className="text-[13px] font-medium text-neutral-200">Reply</span>
-              </button>
-            </motion.div>
-          </AnimatePresence>,
+              <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                <Reply className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <span className="text-[13px] font-medium text-neutral-200">Reply</span>
+            </button>
+          </motion.div>,
           document.body
         );
       })()}
 
-      <div className="shrink-0" style={{ background: '#161719', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* input area */}
+      <div className="shrink-0 relative" style={{ background: '#161719', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
 
         <AnimatePresence>
           {replyingTo && (
