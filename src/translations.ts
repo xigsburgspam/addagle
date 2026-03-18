@@ -71,7 +71,9 @@ export const translations = {
     totalVideoChats: 'Total Video Chats Done',
     totalUsers: 'Accounts Created',
     anonymousChat: 'Anonymous Chat',
-    anonymousChatDesc: 'Text-only anonymous chat. No history, no logs, pure anonymity.'
+    anonymousChatDesc: 'Text-only anonymous chat. No history, no logs, pure anonymity.',
+    locationPolicy: 'Location Policy',
+    locationPolicyDesc: 'We use your geographical location to connect you with people in your district and to show user distribution on our live map. Your precise coordinates are never stored or shared.'
   },
   bn: {
     appName: 'গুপ্ত',
@@ -143,6 +145,8 @@ export const translations = {
     totalVideoChats: 'মোট ভিডিও চ্যাট হয়েছে',
     totalUsers: 'অ্যাকাউন্ট তৈরি হয়েছে',
     anonymousChat: 'বেনামী চ্যাট',
-    anonymousChatDesc: 'শুধুমাত্র টেক্সট চ্যাট। কোনো হিস্ট্রি নেই, কোনো লগ নেই, একদম বেনামী।'
+    anonymousChatDesc: 'শুধুমাত্র টেক্সট চ্যাট। কোনো হিস্ট্রি নেই, কোনো লগ নেই, একদম বেনামী।',
+    locationPolicy: 'লোকেশন পলিসি',
+    locationPolicyDesc: 'আমরা আপনার ভৌগোলিক অবস্থান ব্যবহার করি আপনার জেলার মানুষের সাথে আপনাকে যুক্ত করতে এবং আমাদের লাইভ ম্যাপে ইউজার ডিস্ট্রিবিউশন দেখাতে। আপনার সঠিক স্থানাঙ্ক কখনোই সংরক্ষণ বা শেয়ার করা হয় না।'
   }
 };

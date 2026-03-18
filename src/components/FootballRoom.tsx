@@ -4,15 +4,9 @@ import { Send, Maximize2, Minimize2, ArrowLeft, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Hls from 'hls.js';
 
-const BANNED_WORDS = [
-  'sex','fuck','suck','kiss','bongo','boltu','hasina','chudina','chudi',
-  'xudi','xudina','chodna','xodna','modi','bongoboltu'
-];
+import { getDistrict } from '../utils/location';
 
-function containsBanned(t: string) {
-  const l = t.toLowerCase();
-  return BANNED_WORDS.some(w => l.includes(w));
-}
+import { BANNED_WORDS, containsBanned } from '../constants';
 
 const CHAT_LIMIT = 200;
 
@@ -41,6 +35,7 @@ interface Props {
 export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const [socket,      setSocket]      = useState<Socket | null>(null);
   const [entries,     setEntries]     = useState<ChatEntry[]>([]);
+  const [memberCount, setMemberCount] = useState(0);
   const [inputText,   setInputText]   = useState('');
   const [inputError,  setInputError]  = useState('');
   const [fullscreen,  setFullscreen]  = useState(false);
@@ -56,6 +51,15 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const typingTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isM3u8 = match.streamUrl.toLowerCase().includes('.m3u8');
+  const isYouTube = match.streamUrl.includes('youtube.com') || match.streamUrl.includes('youtu.be');
+
+  const getYouTubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const youtubeId = isYouTube ? getYouTubeId(match.streamUrl) : null;
 
   useEffect(() => {
     if (!isM3u8 || streamInPopup || !videoRef.current) return;
@@ -104,6 +108,9 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
 
     const onConnect = () => {
       sock.emit('football-join', { matchId: match.id, name: userName });
+      getDistrict().then(district => {
+        sock.emit('set-district', { district });
+      }).catch(() => {});
     };
 
     if (sock.connected) {
@@ -131,6 +138,10 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
 
     sock.on('football-typing-stop', ({ name }: { name: string }) => {
       clearTypingFor(name);
+    });
+
+    sock.on('football-member-count', ({ count }: { count: number }) => {
+      setMemberCount(count);
     });
 
     return () => { sock.disconnect(); };
@@ -209,6 +220,10 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
             <p className="text-sm font-black text-white">
               {match.teamA} <span className="text-neutral-500">vs</span> {match.teamB}
             </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Users className="w-2.5 h-2.5 text-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-500">{memberCount} {memberCount === 1 ? 'member' : 'members'} present</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -243,6 +258,14 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
               playsInline
               autoPlay
             />
+          ) : isYouTube && youtubeId ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&controls=0&modestbranding=1&rel=0&showinfo=0`}
+              className="w-full h-full border-0"
+              allowFullScreen
+              allow="autoplay; fullscreen; encrypted-media"
+              title="Match Stream"
+            />
           ) : (
             <iframe
               ref={iframeRef}
@@ -255,7 +278,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
           )}
           
           {/* Overlay for anti-iframe fallback */}
-          {!isM3u8 && (
+          {!isM3u8 && !isYouTube && (
             <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className="bg-neutral-900/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center max-w-xs pointer-events-auto shadow-2xl">
                 <p className="text-xs text-neutral-300 mb-3 leading-relaxed">

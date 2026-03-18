@@ -3,21 +3,202 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
+import { containsBanned } from '../constants';
 
-export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onWatchFootball: () => void }> = ({ onStart, onWatchFootball }) => {
-  const { user, userData, loading } = useFirebase();
+const BANGLADESH_DISTRICTS = [
+  "Dhaka", "Faridpur", "Gazipur", "Gopalganj", "Kishoreganj", "Madaripur", "Manikganj", "Munshiganj", "Narayanganj", "Narsingdi", "Rajbari", "Shariatpur", "Tangail",
+  "Bagerhat", "Chuadanga", "Jessore", "Jhenaidah", "Khulna", "Kushtia", "Magura", "Meherpur", "Narail", "Satkhira",
+  "Bogra", "Joypurhat", "Naogaon", "Natore", "Chapai Nawabganj", "Pabna", "Rajshahi", "Sirajganj",
+  "Dinajpur", "Gaibandha", "Kurigram", "Lalmonirhat", "Nilphamari", "Panchagarh", "Rangpur", "Thakurgaon",
+  "Habiganj", "Moulvibazar", "Sunamganj", "Sylhet",
+  "Barguna", "Barisal", "Bhola", "Jhalokati", "Patuakhali", "Pirojpur",
+  "Bandarban", "Brahmanbaria", "Chandpur", "Chittagong", "Comilla", "Cox's Bazar", "Feni", "Khagrachhari", "Lakshmipur", "Noakhali", "Rangamati",
+  "Sherpur", "Jamalpur", "Netrokona", "Mymensingh"
+];
+
+// Approximate relative positions (0-100) for the SVG map
+const DISTRICT_POSITIONS: Record<string, { x: number; y: number }> = {
+  "Panchagarh": { x: 25, y: 5 }, "Thakurgaon": { x: 20, y: 10 }, "Nilphamari": { x: 35, y: 10 }, "Lalmonirhat": { x: 45, y: 12 }, "Kurigram": { x: 55, y: 15 },
+  "Dinajpur": { x: 28, y: 18 }, "Rangpur": { x: 40, y: 18 }, "Gaibandha": { x: 50, y: 22 }, "Joypurhat": { x: 35, y: 28 }, "Naogaon": { x: 25, y: 32 },
+  "Bogra": { x: 45, y: 32 }, "Chapai Nawabganj": { x: 10, y: 40 }, "Rajshahi": { x: 22, y: 45 }, "Natore": { x: 35, y: 45 }, "Sirajganj": { x: 48, y: 42 },
+  "Pabna": { x: 38, y: 55 }, "Kushtia": { x: 25, y: 58 }, "Meherpur": { x: 15, y: 62 }, "Chuadanga": { x: 18, y: 68 }, "Jhenaidah": { x: 28, y: 68 },
+  "Magura": { x: 35, y: 72 }, "Rajbari": { x: 45, y: 65 }, "Faridpur": { x: 50, y: 72 }, "Manikganj": { x: 55, y: 62 }, "Tangail": { x: 58, y: 48 },
+  "Jamalpur": { x: 58, y: 35 }, "Sherpur": { x: 65, y: 28 }, "Mymensingh": { x: 70, y: 35 }, "Netrokona": { x: 80, y: 32 }, "Kishoreganj": { x: 82, y: 45 },
+  "Sunamganj": { x: 90, y: 25 }, "Sylhet": { x: 95, y: 35 }, "Moulvibazar": { x: 92, y: 45 }, "Habiganj": { x: 88, y: 52 }, "Brahmanbaria": { x: 80, y: 58 },
+  "Narsingdi": { x: 72, y: 62 }, "Gazipur": { x: 65, y: 58 }, "Dhaka": { x: 65, y: 68 }, "Narayanganj": { x: 72, y: 72 }, "Munshiganj": { x: 68, y: 78 },
+  "Shariatpur": { x: 75, y: 82 }, "Madaripur": { x: 62, y: 82 }, "Gopalganj": { x: 55, y: 85 }, "Narail": { x: 42, y: 78 }, "Jessore": { x: 30, y: 78 },
+  "Satkhira": { x: 28, y: 90 }, "Khulna": { x: 38, y: 88 }, "Bagerhat": { x: 48, y: 92 }, "Pirojpur": { x: 55, y: 92 }, "Jhalokati": { x: 60, y: 90 },
+  "Barisal": { x: 68, y: 88 }, "Bhola": { x: 78, y: 92 }, "Lakshmipur": { x: 85, y: 85 }, "Chandpur": { x: 80, y: 78 }, "Comilla": { x: 88, y: 68 },
+  "Feni": { x: 92, y: 78 }, "Noakhali": { x: 88, y: 88 }, "Patuakhali": { x: 72, y: 95 }, "Barguna": { x: 65, y: 98 }, "Chittagong": { x: 95, y: 88 },
+  "Khagrachhari": { x: 98, y: 65 }, "Rangamati": { x: 99, y: 75 }, "Bandarban": { x: 98, y: 95 }, "Cox's Bazar": { x: 95, y: 99 }
+};
+
+const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => void; onClose: () => void }> = ({ onConfirm, onClose }) => {
+  const [name, setName] = useState('');
+  const [save, setSave] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConfirm = () => {
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      setError('Name must be at least 2 characters');
+      return;
+    }
+    if (containsBanned(trimmed)) {
+      setError('That name contains prohibited words.');
+      return;
+    }
+    onConfirm(trimmed, save);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-[32px] p-8 shadow-2xl"
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-2xl font-black uppercase tracking-tighter">Enter Your Name</h3>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+            <X className="w-6 h-6 text-neutral-500" />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-2 ml-1">Display Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => { setName(e.target.value); setError(''); }}
+              placeholder="How should we call you?"
+              className="w-full bg-black border border-neutral-800 rounded-2xl px-6 py-4 text-white placeholder:text-neutral-700 focus:outline-none focus:border-emerald-500/50 transition-all font-bold"
+              autoFocus
+            />
+            {error && <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest mt-2 ml-1">{error}</p>}
+          </div>
+
+          <button
+            onClick={() => setSave(!save)}
+            className="flex items-center gap-3 group cursor-pointer"
+          >
+            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${save ? 'bg-emerald-500 border-emerald-500' : 'border-neutral-800 group-hover:border-neutral-700'}`}>
+              {save && <Check className="w-4 h-4 text-black" />}
+            </div>
+            <span className="text-sm font-bold text-neutral-400 group-hover:text-neutral-300">Save this name for all chats</span>
+          </button>
+
+          <button
+            disabled={!name.trim()}
+            onClick={handleConfirm}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:hover:bg-emerald-500 text-black font-black py-4 rounded-2xl transition-all uppercase tracking-widest"
+          >
+            Confirm & Join
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const BangladeshMap: React.FC<{ districtUsers: Record<string, number> }> = ({ districtUsers }) => {
+  const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
+
+  return (
+    <div className="w-full aspect-[4/5] max-h-[600px] rounded-[40px] overflow-hidden border border-neutral-800 bg-neutral-900/50 relative p-8 flex items-center justify-center">
+      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-2xl">
+        {/* More accurate Bangladesh Outline */}
+        <path
+          d="M30,5 L40,2 L55,5 L65,10 L75,15 L85,20 L95,25 L98,40 L95,60 L98,75 L95,85 L88,95 L80,98 L70,95 L60,98 L50,95 L40,98 L30,95 L20,98 L10,90 L5,80 L2,65 L5,50 L2,35 L10,20 L20,10 Z"
+          fill="rgba(16, 185, 129, 0.03)"
+          stroke="rgba(16, 185, 129, 0.2)"
+          strokeWidth="0.3"
+        />
+        
+        {/* District points */}
+        {Object.entries(DISTRICT_POSITIONS).map(([name, pos]) => {
+          const count = districtUsers[name] || 0;
+          const isActive = count > 0;
+          
+          return (
+            <g 
+              key={name} 
+              onMouseEnter={() => setHoveredDistrict(name)}
+              onMouseLeave={() => setHoveredDistrict(null)}
+              className="cursor-pointer"
+            >
+              {/* Pulse effect for active districts */}
+              {isActive && (
+                <circle cx={pos.x} cy={pos.y} r="1.5" fill="#10b981" className="animate-ping opacity-20" />
+              )}
+              
+              <circle
+                cx={pos.x}
+                cy={pos.y}
+                r={isActive ? "0.8" : "0.4"}
+                fill={isActive ? "#10b981" : "#404040"}
+                className="transition-all duration-300"
+              />
+
+              {hoveredDistrict === name && (
+                <foreignObject x={pos.x + 2} y={pos.y - 5} width="40" height="10">
+                  <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded px-2 py-1 text-[4px] font-black text-white whitespace-nowrap">
+                    {name}: {count}
+                  </div>
+                </foreignObject>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      
+      <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-400">Active Districts</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-neutral-700" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Inactive</span>
+          </div>
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-tighter text-neutral-700">64 Districts Illustrated</span>
+      </div>
+    </div>
+  );
+};
+
+export const HomePage: React.FC<{
+  onStart: (mode: 'video' | 'text', name: string) => void;
+  onWatchFootball: (name: string) => void;
+  onCustomChat: (name: string) => void;
+}> = ({ onStart, onWatchFootball, onCustomChat }) => {
+  const { user, userData, loading, updateDisplayName, removeDisplayName } = useFirebase();
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: 'video' | 'text' | 'football' | 'custom' } | null>(null);
   const [stats, setStats] = useState({
     onlineUsers: 0,
     videoChatting: 0,
     textChatting: 0,
+    customChatting: 0,
+    footballChatting: 0,
     totalVideoChats: 0,
     totalTextChats: 0,
-    totalAccounts: 0
+    totalAccounts: 0,
+    districtUsers: {} as Record<string, number>
   });
 
   // Live counters from /api/stats
@@ -32,6 +213,9 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
             onlineUsers: data.onlineUsers || 0,
             videoChatting: data.videoChatting || 0,
             textChatting: data.textChatting || 0,
+            customChatting: data.customChatting || 0,
+            footballChatting: data.footballChatting || 0,
+            districtUsers: data.districtUsers || {},
           }));
         }
       } catch (e) {
@@ -68,6 +252,32 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
       await signInWithPopup(auth, googleProvider);
     } catch (e) {
       console.error('Login failed:', e);
+    }
+  };
+
+  const handleAction = (type: 'video' | 'text' | 'football' | 'custom') => {
+    if (userData?.hasSavedName && userData?.savedDisplayName) {
+      executeAction(type, userData.savedDisplayName);
+    } else {
+      setPendingAction({ type });
+      setShowNamePrompt(true);
+    }
+  };
+
+  const executeAction = (type: 'video' | 'text' | 'football' | 'custom', name: string) => {
+    if (type === 'video' || type === 'text') onStart(type, name);
+    else if (type === 'football') onWatchFootball(name);
+    else if (type === 'custom') onCustomChat(name);
+  };
+
+  const handleNameConfirm = async (name: string, save: boolean) => {
+    if (save) {
+      await updateDisplayName(name, true);
+    }
+    setShowNamePrompt(false);
+    if (pendingAction) {
+      executeAction(pendingAction.type, name);
+      setPendingAction(null);
     }
   };
 
@@ -152,7 +362,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
                 ) : (
                   <>
                     <button
-                      onClick={() => onStart('video')}
+                      onClick={() => handleAction('video')}
                       className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto"
                     >
                       {t.startEncounter}
@@ -160,7 +370,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
                     </button>
 
                     <button
-                      onClick={() => onStart('text')}
+                      onClick={() => handleAction('text')}
                       className="group relative bg-neutral-900 border border-neutral-800 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:border-emerald-500/50 hover:bg-gradient-to-r hover:from-neutral-900 hover:to-neutral-800 transition-all duration-500 w-full sm:w-auto"
                     >
                       {t.startTextChat}
@@ -168,12 +378,20 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
                     </button>
 
                     <button
-                      onClick={onWatchFootball}
+                      onClick={() => handleAction('football')}
                       className="group relative overflow-hidden bg-gradient-to-r from-green-600 to-emerald-700 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-green-500 hover:to-emerald-600 transition-all duration-500 shadow-2xl shadow-green-900/40 w-full sm:w-auto"
                     >
                       <span className="absolute top-1 right-2 text-[8px] font-black text-green-300/70 uppercase tracking-widest animate-pulse">● LIVE</span>
                       <Tv2 className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
                       Watch Football
+                    </button>
+
+                    <button
+                      onClick={() => handleAction('custom')}
+                      className="group relative bg-indigo-600 border border-indigo-500 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:bg-indigo-500 transition-all duration-500 shadow-2xl shadow-indigo-500/20 w-full sm:w-auto"
+                    >
+                      <Users className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
+                      Custom Chat Room
                     </button>
                   </>
                 )
@@ -193,43 +411,77 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
               )}
             </div>
 
-            {/* Stats Grid */}
-            <div className="mt-16 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-8 w-full text-left">
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
-                <div className="flex items-center gap-2 text-emerald-500">
-                  <Users className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Online</span>
+            {user && userData?.hasSavedName && (
+              <div className="mt-6 flex flex-col items-center gap-3">
+                <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">
+                  Signed in as <span className="text-emerald-500">{userData.savedDisplayName}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowNamePrompt(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
+                  >
+                    <UserCheck className="w-3 h-3" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Change Name</span>
+                  </button>
+                  <button
+                    onClick={() => removeDisplayName()}
+                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-red-400 transition-all group"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Remove Name</span>
+                  </button>
                 </div>
-                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.onlineUsers}</span>
               </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
-                <div className="flex items-center gap-2 text-emerald-500">
-                  <Video className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Video Chatting</span>
+            )}
+
+            {/* Stats Bar */}
+            <div className="mt-12 flex flex-wrap justify-center gap-3 w-full">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
+                <Users className="w-3 h-3 text-emerald-500" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Online:</span>
+                <span className="text-xs font-black text-emerald-500 tabular-nums">{stats.onlineUsers}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
+                <Video className="w-3 h-3 text-emerald-500" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Video:</span>
+                <span className="text-xs font-black text-emerald-500 tabular-nums">{stats.videoChatting}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
+                <MessageCircle className="w-3 h-3 text-emerald-500" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Text:</span>
+                <span className="text-xs font-black text-emerald-500 tabular-nums">{stats.textChatting}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
+                <Shield className="w-3 h-3 text-neutral-600" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-600">Total Video:</span>
+                <span className="text-xs font-black text-neutral-400 tabular-nums">{stats.totalVideoChats.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
+                <MessageSquare className="w-3 h-3 text-neutral-600" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-600">Total Text:</span>
+                <span className="text-xs font-black text-neutral-400 tabular-nums">{stats.totalTextChats.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
+                <UserCheck className="w-3 h-3 text-neutral-600" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-600">Accounts:</span>
+                <span className="text-xs font-black text-neutral-400 tabular-nums">{stats.totalAccounts.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Map Section */}
+            <div className="mt-20 w-full">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-black uppercase tracking-tighter">Live User Distribution</h2>
+                  <p className="text-neutral-500 text-sm font-medium">Real-time activity across districts</p>
                 </div>
-                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.videoChatting}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
-                <div className="flex items-center gap-2 text-emerald-500">
-                  <MessageCircle className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Text Chatting</span>
+                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Map</span>
                 </div>
-                <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{stats.textChatting}</span>
               </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
-                <div className="flex items-center gap-2 text-neutral-600">
-                  <Zap className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Total Video Chats</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalVideoChats}</span>
-              </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
-                <div className="flex items-center gap-2 text-neutral-600">
-                  <MessageSquare className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Total Text Chats</span>
-                </div>
-                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalTextChats}</span>
-              </div>
+              <BangladeshMap districtUsers={stats.districtUsers} />
             </div>
           </motion.div>
         </div>
@@ -291,7 +543,21 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onW
         </div>
       </footer>
 
-      <AdminPopup isOpen={isAdminPopupOpen} onClose={() => setIsAdminPopupOpen(false)} />
+      {/* Admin Popup */}
+      <AnimatePresence>
+        {isAdminPopupOpen && (
+          <AdminPopup isOpen={isAdminPopupOpen} onClose={() => setIsAdminPopupOpen(false)} />
+        )}
+        {showNamePrompt && (
+          <DisplayNamePrompt
+            onConfirm={handleNameConfirm}
+            onClose={() => {
+              setShowNamePrompt(false);
+              setPendingAction(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,19 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Tv2, Trophy, Loader2, ArrowRight, User, AlertCircle } from 'lucide-react';
+import { X, Tv2, Trophy, Loader2, ArrowRight, User, AlertCircle, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
 import { collection, query, where, onSnapshot, db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
-const BANNED_WORDS = [
-  'sex','fuck','suck','kiss','bongo','boltu','hasina','chudina','chudi',
-  'xudi','xudina','chodna','xodna','modi','bongoboltu'
-];
-
-function containsBanned(text: string) {
-  const lower = text.toLowerCase();
-  return BANNED_WORDS.some(w => lower.includes(w));
-}
+import { BANNED_WORDS, containsBanned } from '../constants';
 
 interface Match {
   id: string;
@@ -28,13 +20,15 @@ interface Match {
 interface Props {
   onClose: () => void;
   onEnter: (match: Match, name: string) => void;
+  userName?: string;
 }
 
-export const FootballLobby: React.FC<Props> = ({ onClose, onEnter }) => {
+export const FootballLobby: React.FC<Props> = ({ onClose, onEnter, userName }) => {
   const [matches,   setMatches]   = useState<Match[]>([]);
+  const [counts,    setCounts]    = useState<Record<string, number>>({});
   const [loading,   setLoading]   = useState(true);
   const [selected,  setSelected]  = useState<Match | null>(null);
-  const [name,      setName]      = useState('');
+  const [name,      setName]      = useState(userName || '');
   const [checking,  setChecking]  = useState(false);
   const [nameError, setNameError] = useState('');
   const [step,      setStep]      = useState<'list' | 'name'>('list');
@@ -54,29 +48,61 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter }) => {
     return () => unsubscribe();
   }, []);
 
-  const handleEnter = (match: Match) => {
+  useEffect(() => {
+    if (step !== 'list') return;
+    const sock = io();
+    sock.on('connect', () => {
+      sock.emit('football-get-counts');
+    });
+    sock.on('football-lobby-counts', ({ counts }: { counts: Record<string, number> }) => {
+      setCounts(counts);
+    });
+    const interval = setInterval(() => {
+      if (sock.connected) sock.emit('football-get-counts');
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+      sock.disconnect();
+    };
+  }, [step]);
+
+  const handleEnter = async (match: Match) => {
     setSelected(match);
-    setStep('name');
-    setName('');
+    const currentName = userName || name;
+    if (currentName) {
+      // If we have a name, check availability immediately
+      setStep('name');
+      setName(currentName);
+      // We'll trigger the check automatically
+      setTimeout(() => {
+        handleNameSubmit(currentName, match.id);
+      }, 100);
+    } else {
+      setStep('name');
+      setName('');
+    }
     setNameError('');
   };
 
-  const handleNameSubmit = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) { setNameError('Please enter a name.'); return; }
-    if (trimmed.length < 2)  { setNameError('Name must be at least 2 characters.'); return; }
-    if (trimmed.length > 20) { setNameError('Name must be 20 characters or less.'); return; }
-    if (!/^[a-zA-Z0-9_\u0980-\u09FF ]+$/.test(trimmed)) {
-      setNameError('Only letters, numbers, spaces and underscores allowed.'); return;
+  const handleNameSubmit = async (overrideName?: string, overrideMatchId?: string) => {
+    const targetName = (overrideName || name).trim();
+    const targetMatchId = overrideMatchId || selected?.id;
+    if (!targetMatchId) return;
+
+    if (!targetName) { setNameError('Please enter a name.'); setStep('name'); return; }
+    if (targetName.length < 2)  { setNameError('Name must be at least 2 characters.'); setStep('name'); return; }
+    if (targetName.length > 20) { setNameError('Name must be 20 characters or less.'); setStep('name'); return; }
+    if (!/^[a-zA-Z0-9_\u0980-\u09FF ]+$/.test(targetName)) {
+      setNameError('Only letters, numbers, spaces and underscores allowed.'); setStep('name'); return;
     }
-    if (containsBanned(trimmed)) { setNameError('That name contains prohibited words.'); return; }
+    if (containsBanned(targetName)) { setNameError('That name contains prohibited words.'); setStep('name'); return; }
 
     setChecking(true);
     setNameError('');
 
     const sock = io({ forceNew: true });
     const onConnect = () => {
-      sock.emit('football-check-name', { matchId: selected!.id, name: trimmed });
+      sock.emit('football-check-name', { matchId: targetMatchId, name: targetName });
     };
     if (sock.connected) {
       onConnect();
@@ -88,8 +114,9 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter }) => {
       setChecking(false);
       if (!available) {
         setNameError('That name is already taken in this room. Choose another.');
+        setStep('name');
       } else {
-        onEnter(selected!, trimmed);
+        onEnter(selected || matches.find(m => m.id === targetMatchId)!, targetName);
       }
     });
     setTimeout(() => {
@@ -169,6 +196,12 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter }) => {
                           <p className="text-sm font-black text-white truncate">
                             {match.teamA} <span className="text-neutral-500">vs</span> {match.teamB}
                           </p>
+                          <div className="flex items-center gap-1.5 mt-0.5 opacity-60">
+                            <Users className="w-2.5 h-2.5 text-emerald-500" />
+                            <span className="text-[10px] font-bold text-emerald-500">
+                              {counts[match.id] || 0} { (counts[match.id] || 0) === 1 ? 'member' : 'members' } present
+                            </span>
+                          </div>
                         </div>
                         <button
                           onClick={() => handleEnter(match)}

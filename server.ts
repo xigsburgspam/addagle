@@ -23,6 +23,16 @@ const adminDb = getFirestore(firebaseConfig.firestoreDatabaseId);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const BANNED_WORDS = [
+  'sex', 'fuck', 'suck', 'kiss', 'bongo', 'boltu', 'hasina', 'chudina', 'chudi',
+  'xudi', 'xudina', 'chodna', 'xodna', 'modi', 'bongoboltu'
+];
+
+function containsBanned(text: string) {
+  const lower = text.toLowerCase();
+  return BANNED_WORDS.some(w => lower.includes(w));
+}
+
 async function startServer() {
   const app = express();
   const server = createServer(app);
@@ -84,6 +94,7 @@ async function startServer() {
   const activeMatches = new Map<string, string>();
   const userModes = new Map<string, 'video' | 'text'>();
   const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
+  const districtUsers = new Map<string, number>(); // districtName -> count
 
   let totalVideoChats = 0;
   let totalTextChats = 0;
@@ -92,8 +103,106 @@ async function startServer() {
   // matchId → { names: Set<string> }
   const footballRooms = new Map<string, { names: Set<string> }>();
 
+  // ── Custom Chat Rooms ────────────────────────────────────────────────────
+  interface CustomRoomUser {
+    socketId: string;
+    name: string;
+    uid?: string;
+    email?: string;
+  }
+  interface CustomRoom {
+    id: string;
+    isGlobal: boolean;
+    mode?: 'friends' | 'district';
+    district?: string;
+    maxMembers?: number;
+    users: CustomRoomUser[];
+    expiresAt?: number;
+  }
+  const customRooms = new Map<string, CustomRoom>();
+
+  // Helper to broadcast room state
+  const broadcastCustomRoom = (roomId: string) => {
+    const room = customRooms.get(roomId);
+    if (room) {
+      io.to(`custom:${roomId}`).emit('custom-room-update', {
+        id: room.id,
+        isGlobal: room.isGlobal,
+        mode: room.mode,
+        district: room.district,
+        maxMembers: room.maxMembers,
+        users: room.users,
+        expiresAt: room.expiresAt
+      });
+    }
+  };
+
+  // Join or Create District Room
+  const joinOrCreateDistrictRoom = (socket: any, { district, name, uid, email }: { district: string, name: string, uid?: string, email?: string }) => {
+    if (containsBanned(name)) {
+      socket.emit('custom-error', 'Prohibited words in name.');
+      return;
+    }
+    const roomId = `district-${district}`;
+    let room = customRooms.get(roomId);
+
+    if (!room) {
+      room = {
+        id: roomId,
+        isGlobal: false,
+        mode: 'district',
+        district,
+        maxMembers: 15,
+        users: [],
+        expiresAt: Date.now() + 15 * 60 * 1000 // 15 minutes
+      };
+      customRooms.set(roomId, room);
+    }
+
+    if (room.users.some(u => u.name === name)) {
+      socket.emit('custom-error', 'Name already taken in this district room.');
+      return;
+    }
+
+    if (room.maxMembers && room.users.length >= room.maxMembers) {
+      socket.emit('custom-error', 'District room is full.');
+      return;
+    }
+
+    room.users.push({ socketId: socket.id, name, uid, email });
+    socket._customRoom = roomId;
+    socket._customName = name;
+    socket.join(`custom:${roomId}`);
+    io.to(`custom:${roomId}`).emit('custom-system', `${name} joined the district room`);
+    broadcastCustomRoom(roomId);
+
+    // Increment total text chats
+    totalTextChats++;
+    adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+  };
+
+  // Timer interval for custom rooms
+  setInterval(() => {
+    const now = Date.now();
+    for (const [roomId, room] of customRooms.entries()) {
+      if (!room.isGlobal && room.expiresAt && now >= room.expiresAt) {
+        io.to(`custom:${roomId}`).emit('custom-expired');
+        io.in(`custom:${roomId}`).socketsLeave(`custom:${roomId}`);
+        customRooms.delete(roomId);
+      }
+    }
+  }, 5000);
+
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
+
+    // Track user district
+    socket.on('set-district', ({ district }: { district: string }) => {
+      if (!district) return;
+      (socket as any)._district = district;
+      districtUsers.set(district, (districtUsers.get(district) || 0) + 1);
+      io.emit('district-update', Object.fromEntries(districtUsers));
+    });
 
     // Join matchmaking queue
     socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
@@ -242,12 +351,28 @@ async function startServer() {
     // ── Football public chat ────────────────────────────────────────────────
 
     socket.on('football-check-name', ({ matchId, name }: { matchId: string; name: string }) => {
+      if (containsBanned(name)) {
+        socket.emit('football-name-result', { available: false, error: 'Prohibited words in name' });
+        return;
+      }
       const room = footballRooms.get(matchId);
       const taken = room ? room.names.has(name.toLowerCase()) : false;
       socket.emit('football-name-result', { available: !taken });
     });
 
+    socket.on('football-get-counts', () => {
+      const counts: Record<string, number> = {};
+      footballRooms.forEach((room, matchId) => {
+        counts[matchId] = room.names.size;
+      });
+      socket.emit('football-lobby-counts', { counts });
+    });
+
     socket.on('football-join', ({ matchId, name }: { matchId: string; name: string }) => {
+      if (containsBanned(name)) {
+        socket.emit('football-error', 'Prohibited words in name');
+        return;
+      }
       if (!footballRooms.has(matchId)) {
         footballRooms.set(matchId, { names: new Set() });
       }
@@ -261,10 +386,16 @@ async function startServer() {
       (socket as any)._footballName  = name;
       socket.join(`football:${matchId}`);
       io.to(`football:${matchId}`).emit('football-system', { text: `${name} has joined` });
+      io.to(`football:${matchId}`).emit('football-member-count', { count: room.names.size });
       socket.emit('football-joined', { name });
+
+      // Increment total text chats
+      totalTextChats++;
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('football-message', ({ matchId, text }: { matchId: string; text: string }) => {
+      if (containsBanned(text)) return; // Silently drop or handle
       const name = (socket as any)._footballName;
       if (!name) return;
       io.to(`football:${matchId}`).emit('football-chat', { name, text, ts: Date.now() });
@@ -282,6 +413,184 @@ async function startServer() {
       socket.to(`football:${matchId}`).emit('football-typing-stop', { name });
     });
 
+    // ── Custom Chat Rooms ───────────────────────────────────────────────────
+
+    socket.on('custom-join-global', ({ name, uid, email }) => {
+      if (containsBanned(name)) {
+        socket.emit('custom-error', 'Prohibited words in name.');
+        return;
+      }
+      const roomId = 'global-chat';
+      if (!customRooms.has(roomId)) {
+        customRooms.set(roomId, { id: roomId, isGlobal: true, users: [] });
+      }
+      const room = customRooms.get(roomId)!;
+      if (room.users.some(u => u.name === name)) {
+        socket.emit('custom-error', 'Name already taken in global chat.');
+        return;
+      }
+      room.users.push({ socketId: socket.id, name, uid, email });
+      (socket as any)._customRoom = roomId;
+      (socket as any)._customName = name;
+      socket.join(`custom:${roomId}`);
+      io.to(`custom:${roomId}`).emit('custom-system', `${name} joined global chat`);
+      broadcastCustomRoom(roomId);
+
+      // Increment total text chats
+      totalTextChats++;
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    });
+
+    socket.on('custom-create', ({ roomName, maxMembers, mode, district, name, uid, email }) => {
+      if (containsBanned(name)) {
+        socket.emit('custom-error', 'Prohibited words in name.');
+        return;
+      }
+      if (containsBanned(roomName)) {
+        socket.emit('custom-error', 'Prohibited words in room name.');
+        return;
+      }
+      if (customRooms.has(roomName)) {
+        socket.emit('custom-error', 'Room name already exists.');
+        return;
+      }
+      const newRoom: CustomRoom = {
+        id: roomName,
+        isGlobal: false,
+        mode,
+        district,
+        maxMembers,
+        users: [{ socketId: socket.id, name, uid, email }],
+        expiresAt: Date.now() + 15 * 60 * 1000 // 15 minutes
+      };
+      customRooms.set(roomName, newRoom);
+      (socket as any)._customRoom = roomName;
+      (socket as any)._customName = name;
+      socket.join(`custom:${roomName}`);
+      io.to(`custom:${roomName}`).emit('custom-system', `${name} created the room`);
+      broadcastCustomRoom(roomName);
+
+      // Increment total text chats
+      totalTextChats++;
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    });
+
+    socket.on('custom-join', ({ roomName, name, uid, email }) => {
+      if (containsBanned(name)) {
+        socket.emit('custom-error', 'Prohibited words in name.');
+        return;
+      }
+      const room = customRooms.get(roomName);
+      if (!room) {
+        socket.emit('custom-error', 'Room not found.');
+        return;
+      }
+      if (room.isGlobal) {
+        socket.emit('custom-error', 'Cannot join global chat via this method.');
+        return;
+      }
+      if (room.maxMembers && room.users.length >= room.maxMembers) {
+        socket.emit('custom-error', 'Room is full.');
+        return;
+      }
+      if (room.users.some(u => u.name === name)) {
+        socket.emit('custom-error', 'Name already taken in this room.');
+        return;
+      }
+      room.users.push({ socketId: socket.id, name, uid, email });
+      (socket as any)._customRoom = roomName;
+      (socket as any)._customName = name;
+      socket.join(`custom:${roomName}`);
+      io.to(`custom:${roomName}`).emit('custom-system', `${name} joined the room`);
+      broadcastCustomRoom(roomName);
+
+      // Increment total text chats
+      totalTextChats++;
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    });
+
+    socket.on('custom-join-district', ({ district, name, uid, email }) => {
+      if (containsBanned(name)) {
+        socket.emit('custom-error', 'Prohibited words in name.');
+        return;
+      }
+      joinOrCreateDistrictRoom(socket, { district, name, uid, email });
+    });
+
+    socket.on('custom-chat', ({ text, replyTo }) => {
+      if (containsBanned(text)) return;
+      const roomId = (socket as any)._customRoom;
+      const name = (socket as any)._customName;
+      if (!roomId || !name) return;
+      const room = customRooms.get(roomId);
+      if (!room) return;
+      
+      // Check if room needs minimum members
+      if (!room.isGlobal && room.users.length < 2) {
+        socket.emit('custom-error', 'Waiting for minimum 2 members to chat.');
+        return;
+      }
+
+      socket.to(`custom:${roomId}`).emit('custom-chat', { name, text, ts: Date.now(), replyTo });
+    });
+
+    socket.on('custom-react', ({ messageId, emoji }) => {
+      const roomId = (socket as any)._customRoom;
+      if (!roomId) return;
+      socket.to(`custom:${roomId}`).emit('custom-react', { messageId, emoji, name: (socket as any)._customName });
+    });
+
+    socket.on('custom-report', async ({ violatorName, reason }) => {
+      const roomId = (socket as any)._customRoom;
+      const reporterName = (socket as any)._customName;
+      if (!roomId || !reporterName) return;
+      
+      const room = customRooms.get(roomId);
+      if (!room) return;
+
+      const violator = room.users.find(u => u.name === violatorName);
+      const reporter = room.users.find(u => u.name === reporterName);
+
+      if (violator && reporter) {
+        try {
+          await adminDb.collection('reports').add({
+            reporterUid: reporter.uid || 'anonymous',
+            reporterEmail: reporter.email || 'anonymous',
+            reporterName: reporter.name,
+            violatorUid: violator.uid || 'anonymous',
+            violatorEmail: violator.email || 'anonymous',
+            violatorName: violator.name,
+            reason,
+            roomId,
+            timestamp: FieldValue.serverTimestamp()
+          });
+          console.log(`Report submitted: ${reporterName} reported ${violatorName}`);
+        } catch (e) {
+          console.error('Failed to save report:', e);
+        }
+      }
+    });
+
+    socket.on('custom-leave', () => {
+      const roomId = (socket as any)._customRoom;
+      const name = (socket as any)._customName;
+      if (roomId && name) {
+        const room = customRooms.get(roomId);
+        if (room) {
+          room.users = room.users.filter(u => u.socketId !== socket.id);
+          io.to(`custom:${roomId}`).emit('custom-system', `${name} left the room`);
+          if (room.users.length === 0 && !room.isGlobal) {
+            customRooms.delete(roomId);
+          } else {
+            broadcastCustomRoom(roomId);
+          }
+        }
+        socket.leave(`custom:${roomId}`);
+        delete (socket as any)._customRoom;
+        delete (socket as any)._customName;
+      }
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
@@ -290,13 +599,25 @@ async function startServer() {
 
       userModes.delete(socket.id);
 
+      // District cleanup
+      const district = (socket as any)._district;
+      if (district) {
+        const count = districtUsers.get(district) || 1;
+        if (count <= 1) districtUsers.delete(district);
+        else districtUsers.set(district, count - 1);
+        io.emit('district-update', Object.fromEntries(districtUsers));
+      }
+
       // Football room cleanup
       const fMatch = (socket as any)._footballMatch;
       const fName  = (socket as any)._footballName;
       if (fMatch && fName) {
         const fRoom = footballRooms.get(fMatch);
-        if (fRoom) fRoom.names.delete(fName.toLowerCase());
-        io.to(`football:${fMatch}`).emit('football-system', { text: `${fName} has left` });
+        if (fRoom) {
+          fRoom.names.delete(fName.toLowerCase());
+          io.to(`football:${fMatch}`).emit('football-system', { text: `${fName} has left` });
+          io.to(`football:${fMatch}`).emit('football-member-count', { count: fRoom.names.size });
+        }
       }
 
       const partnerId = activeMatches.get(socket.id);
@@ -312,6 +633,22 @@ async function startServer() {
           }
         }
       }
+
+      // Custom room cleanup
+      const customRoomId = (socket as any)._customRoom;
+      const customName = (socket as any)._customName;
+      if (customRoomId && customName) {
+        const room = customRooms.get(customRoomId);
+        if (room) {
+          room.users = room.users.filter(u => u.socketId !== socket.id);
+          io.to(`custom:${customRoomId}`).emit('custom-system', `${customName} left the room`);
+          if (room.users.length === 0 && !room.isGlobal) {
+            customRooms.delete(customRoomId);
+          } else {
+            broadcastCustomRoom(customRoomId);
+          }
+        }
+      }
     });
   });
 
@@ -323,26 +660,38 @@ async function startServer() {
   });
 
   app.get('/api/stats', (req, res) => {
-    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2;
-    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2;
+    const videoChatting = Array.from(rooms.values()).filter(r => r.type === 'video').length * 2 + (waitingVideoUser ? 1 : 0);
+    const textChatting = Array.from(rooms.values()).filter(r => r.type === 'text').length * 2 + (waitingTextUser ? 1 : 0);
+    const customChatting = Array.from(customRooms.values()).reduce((acc, r) => acc + r.users.length, 0);
+    const footballChatting = Array.from(footballRooms.values()).reduce((acc, r) => acc + r.names.size, 0);
     const onlineUsers = io.engine.clientsCount;
     res.json({
       onlineUsers,
       videoChatting,
       textChatting,
+      customChatting,
+      footballChatting,
       totalVideoChats,
-      totalTextChats
+      totalTextChats,
+      districtUsers: Object.fromEntries(districtUsers)
     });
   });
 
   app.get('/api/active-rooms', (req, res) => {
     const activeRooms = Array.from(rooms.entries()).map(([id, data]) => ({
       id,
+      type: '1v1',
       users: data.users,
       peerIds: Object.fromEntries(data.peerIds),
       metadata: Object.fromEntries(data.metadata)
     }));
-    res.json(activeRooms);
+    const activeCustomRooms = Array.from(customRooms.entries()).map(([id, data]) => ({
+      id,
+      type: 'custom',
+      users: data.users.map(u => u.socketId),
+      metadata: {}
+    }));
+    res.json([...activeRooms, ...activeCustomRooms]);
   });
 
   // Vite middleware for development

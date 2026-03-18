@@ -29,6 +29,10 @@ export const TermsPrivacy: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) 
       {
         title: '5. Termination',
         text: 'We reserve the right to terminate or suspend your access to Gupto at any time, without prior notice, for conduct that we believe violates these Terms.'
+      },
+      {
+        title: '6. Location Policy',
+        text: t.locationPolicyDesc
       }
     ]
   } : {
@@ -53,6 +57,10 @@ export const TermsPrivacy: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) 
       {
         title: '5. Security',
         text: 'All video connections are end-to-end encrypted via WebRTC. We take reasonable measures to protect your information.'
+      },
+      {
+        title: '6. Location Policy',
+        text: t.locationPolicyDesc
       }
     ]
   };

@@ -11,6 +11,8 @@ interface UserData {
   role: 'admin' | 'user';
   isBlocked: boolean;
   isEmailBlocked?: boolean;
+  savedDisplayName?: string;
+  hasSavedName?: boolean;
 }
 
 interface FirebaseContextType {
@@ -18,6 +20,8 @@ interface FirebaseContextType {
   userData: UserData | null;
   loading: boolean;
   isAdmin: boolean;
+  updateDisplayName: (name: string, save: boolean) => Promise<void>;
+  removeDisplayName: () => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
@@ -25,6 +29,8 @@ const FirebaseContext = createContext<FirebaseContextType>({
   userData: null,
   loading: true,
   isAdmin: false,
+  updateDisplayName: async () => {},
+  removeDisplayName: async () => {},
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
@@ -94,11 +100,31 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
+  const updateDisplayName = async (name: string, save: boolean) => {
+    if (!user) return;
+    const userDocRef = doc(db, 'users', user.uid);
+    await updateDoc(userDocRef, {
+      savedDisplayName: save ? name : null,
+      hasSavedName: save
+    }).catch(e => handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`));
+  };
+
+  const removeDisplayName = async () => {
+    if (!user) return;
+    const userDocRef = doc(db, 'users', user.uid);
+    await updateDoc(userDocRef, {
+      savedDisplayName: null,
+      hasSavedName: false
+    }).catch(e => handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`));
+  };
+
   const value = {
     user,
     userData,
     loading,
     isAdmin: userData?.role === 'admin',
+    updateDisplayName,
+    removeDisplayName,
   };
 
   return (

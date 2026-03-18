@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { Send, Reply, X, CheckCheck, Clock, Smile, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { BANNED_WORDS, containsBanned } from '../constants';
+
 const CHAR_LIMIT      = 200;
 const SWIPE_THRESHOLD = 58;
 const REACTIONS       = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
@@ -125,6 +127,10 @@ export const Chat: React.FC<ChatProps> = ({
   const send = useCallback(() => {
     const t = inputText.trim();
     if (!t || !socket || t.length > CHAR_LIMIT) return;
+    if (containsBanned(t)) {
+      setInputText('');
+      return;
+    }
     if (typingTimer.current) clearTimeout(typingTimer.current);
     socket.emit('typing-stop', { roomId });
     const msg: Message = {

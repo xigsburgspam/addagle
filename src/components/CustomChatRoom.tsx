@@ -1,0 +1,472 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { ArrowLeft, Send, Users, ShieldAlert, Clock, AlertCircle, Reply, Smile, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useFirebase } from '../FirebaseContext';
+import { getDistrict } from '../utils/location';
+import { containsBanned } from '../constants';
+
+interface CustomChatRoomProps {
+  roomData: {
+    action: 'global' | 'create' | 'join';
+    userName: string;
+    roomName?: string;
+    maxMembers?: number;
+    mode?: 'friends' | 'district';
+    districtName?: string;
+  };
+  onLeave: () => void;
+}
+
+interface ChatEntry {
+  id: string;
+  type: 'msg' | 'system';
+  name?: string;
+  text: string;
+  ts: number;
+  replyTo?: { name: string; text: string };
+  reactions?: { [emoji: string]: string[] };
+}
+
+const VIOLATION_OPTIONS = [
+  'Spamming',
+  'Harassment',
+  'Hate Speech',
+  'Inappropriate Content',
+  'Impersonation',
+  'Other'
+];
+
+export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeave }) => {
+  const { user } = useFirebase();
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [entries, setEntries] = useState<ChatEntry[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [inputError, setInputError] = useState('');
+  const [roomState, setRoomState] = useState<any>(null);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [reportUser, setReportUser] = useState('');
+  const [reportReason, setReportReason] = useState('');
+  const [reportStatus, setReportStatus] = useState('');
+  const [replyTo, setReplyTo] = useState<{ name: string; text: string } | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const addEntry = (entry: ChatEntry) => {
+    setEntries(p => [...p, entry]);
+  };
+
+  useEffect(() => {
+    const sock = io({ forceNew: true });
+    setSocket(sock);
+
+    const onConnect = () => {
+      if (roomData.action === 'global') {
+        sock.emit('custom-join-global', { name: roomData.userName, uid: user?.uid, email: user?.email });
+      } else if (roomData.mode === 'district') {
+        sock.emit('custom-join-district', {
+          district: roomData.districtName,
+          name: roomData.userName,
+          uid: user?.uid,
+          email: user?.email
+        });
+      } else if (roomData.action === 'create') {
+        sock.emit('custom-create', {
+          roomName: roomData.roomName,
+          maxMembers: roomData.maxMembers,
+          mode: roomData.mode,
+          district: roomData.districtName,
+          name: roomData.userName,
+          uid: user?.uid,
+          email: user?.email
+        });
+      } else if (roomData.action === 'join') {
+        sock.emit('custom-join', {
+          roomName: roomData.roomName,
+          name: roomData.userName,
+          uid: user?.uid,
+          email: user?.email
+        });
+      }
+      getDistrict().then(district => {
+        sock.emit('set-district', { district });
+      }).catch(() => {});
+    };
+
+    if (sock.connected) onConnect();
+    else sock.once('connect', onConnect);
+
+    sock.on('custom-room-update', (data) => {
+      setRoomState(data);
+    });
+
+    sock.on('custom-chat', ({ name, text, ts, replyTo }) => {
+      addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name, text, ts, replyTo });
+    });
+
+    sock.on('custom-react', ({ messageId, emoji, name }) => {
+      setEntries(prev => prev.map(entry => {
+        if (entry.id === messageId) {
+          const reactions = { ...(entry.reactions || {}) };
+          if (!reactions[emoji]) reactions[emoji] = [];
+          if (!reactions[emoji].includes(name)) {
+            reactions[emoji].push(name);
+          } else {
+            reactions[emoji] = reactions[emoji].filter(n => n !== name);
+          }
+          return { ...entry, reactions };
+        }
+        return entry;
+      }));
+    });
+
+    sock.on('custom-system', (text) => {
+      addEntry({ id: Math.random().toString(36).slice(2), type: 'system', text, ts: Date.now() });
+    });
+
+    sock.on('custom-error', (msg) => {
+      alert(msg);
+      onLeave();
+    });
+
+    sock.on('custom-expired', () => {
+      alert('Room has expired.');
+      onLeave();
+    });
+
+    return () => {
+      sock.emit('custom-leave');
+      sock.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [entries]);
+
+  useEffect(() => {
+    if (!roomState?.expiresAt) {
+      setTimeLeft(null);
+      return;
+    }
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.floor((roomState.expiresAt - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining === 0) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [roomState?.expiresAt]);
+
+  const send = useCallback(() => {
+    const trimmed = inputText.trim();
+    if (!trimmed || !socket) return;
+    if (trimmed.length > 200) { setInputError('Max 200 characters.'); return; }
+    if (containsBanned(trimmed)) {
+      setInputText('');
+      return;
+    }
+    
+    socket.emit('custom-chat', { text: trimmed, replyTo });
+    addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name: roomData.userName, text: trimmed, ts: Date.now(), replyTo });
+    setInputText('');
+    setInputError('');
+    setReplyTo(null);
+  }, [inputText, socket, roomData.userName, replyTo]);
+
+  const react = (messageId: string, emoji: string) => {
+    if (!socket) return;
+    socket.emit('custom-react', { messageId, emoji });
+    // Optimistic update
+    setEntries(prev => prev.map(entry => {
+      if (entry.id === messageId) {
+        const reactions = { ...(entry.reactions || {}) };
+        if (!reactions[emoji]) reactions[emoji] = [];
+        if (!reactions[emoji].includes(roomData.userName)) {
+          reactions[emoji].push(roomData.userName);
+        } else {
+          reactions[emoji] = reactions[emoji].filter(n => n !== roomData.userName);
+        }
+        return { ...entry, reactions };
+      }
+      return entry;
+    }));
+  };
+
+  const handleReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportUser || !reportReason || !socket) return;
+    socket.emit('custom-report', { violatorName: reportUser, reason: reportReason });
+    setReportStatus('Report submitted.');
+    setTimeout(() => {
+      setShowReport(false);
+      setReportStatus('');
+      setReportUser('');
+      setReportReason('');
+    }, 2000);
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const isWaiting = roomState && !roomState.isGlobal && roomState.users.length < 2;
+
+  return (
+    <div className="flex flex-col h-[100dvh] w-full bg-[#0d0e11] text-white overflow-hidden relative">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] shrink-0 bg-[#13151a]">
+        <div className="flex items-center gap-3">
+          <button onClick={onLeave} className="w-8 h-8 rounded-full bg-white/6 hover:bg-white/12 flex items-center justify-center transition-colors cursor-pointer">
+            <ArrowLeft className="w-4 h-4 text-neutral-400" />
+          </button>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">
+                {roomState?.isGlobal ? 'GLOBAL CHAT' : roomState?.mode === 'district' ? 'DISTRICT CHAT' : 'CUSTOM ROOM'}
+              </span>
+            </div>
+            <p className="text-sm font-black text-white">{roomState?.id || 'Connecting...'}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {timeLeft !== null && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+              <Clock className="w-3 h-3 text-amber-500" />
+              <span className="text-[10px] font-bold text-amber-400 font-mono">{formatTime(timeLeft)}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.07]">
+            <Users className="w-3 h-3 text-neutral-500" />
+            <span className="text-[10px] font-semibold text-neutral-400">{roomState?.users?.length || 0} {roomState?.maxMembers ? `/ ${roomState.maxMembers}` : ''}</span>
+          </div>
+          <button onClick={() => setShowReport(true)} className="w-8 h-8 rounded-full bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-colors cursor-pointer">
+            <ShieldAlert className="w-4 h-4 text-red-500" />
+          </button>
+        </div>
+      </div>
+
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {entries.map(entry => (
+            <motion.div
+              key={entry.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex flex-col ${entry.type === 'system' ? 'items-center my-2' : entry.name === roomData.userName ? 'items-end' : 'items-start'}`}
+            >
+              {entry.type === 'system' ? (
+                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest bg-white/[0.03] px-3 py-1 rounded-full">
+                  {entry.text}
+                </span>
+              ) : (
+                <div className={`max-w-[85%] ${entry.name === roomData.userName ? 'items-end' : 'items-start'} flex flex-col group`}>
+                  {entry.name !== roomData.userName && (
+                    <span className="text-[10px] font-bold text-neutral-500 ml-1 mb-0.5">{entry.name}</span>
+                  )}
+                  
+                  {entry.replyTo && (
+                    <div className="mb-1 px-3 py-1.5 bg-white/5 border-l-2 border-indigo-500 rounded-r-lg text-[11px] text-neutral-400 italic max-w-full truncate">
+                      <span className="font-bold text-indigo-400 not-italic mr-1">{entry.replyTo.name}:</span>
+                      {entry.replyTo.text}
+                    </div>
+                  )}
+
+                  <div className="relative flex items-center gap-2 group">
+                    {entry.name === roomData.userName && (
+                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                        <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                          <Reply className="w-3 h-3 text-neutral-400" />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className={`px-3.5 py-2 rounded-2xl text-[13px] leading-relaxed relative ${
+                      entry.name === roomData.userName
+                        ? 'bg-indigo-600 text-white rounded-br-sm'
+                        : 'bg-neutral-800 text-neutral-200 rounded-bl-sm border border-white/[0.05]'
+                    }`}>
+                      {entry.text}
+                      
+                      {/* Reactions display */}
+                      {entry.reactions && Object.keys(entry.reactions).length > 0 && (
+                        <div className={`absolute -bottom-3 flex flex-wrap gap-1 ${entry.name === roomData.userName ? 'right-0' : 'left-0'}`}>
+                          {Object.entries(entry.reactions).map(([emoji, users]) => (
+                            <button
+                              key={emoji}
+                              onClick={() => react(entry.id, emoji)}
+                              className="px-1.5 py-0.5 bg-neutral-900 border border-white/10 rounded-full text-[10px] flex items-center gap-1 hover:bg-neutral-800 transition-colors"
+                            >
+                              <span>{emoji}</span>
+                              <span className="text-neutral-500">{(users as string[]).length}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {entry.name !== roomData.userName && (
+                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                        <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                          <Reply className="w-3 h-3 text-neutral-400" />
+                        </button>
+                        <div className="relative group/emoji">
+                          <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                            <Smile className="w-3 h-3 text-neutral-400" />
+                          </button>
+                          <div className="absolute bottom-full left-0 mb-2 p-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl hidden group-hover/emoji:flex items-center gap-1 z-20">
+                            {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
+                              <button
+                                key={emoji}
+                                onClick={() => react(entry.id, emoji)}
+                                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-sm"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="h-4" /> {/* Spacer for reactions */}
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Input */}
+        <div className="p-3 bg-[#13151a] border-t border-white/[0.07] shrink-0">
+          {replyTo && (
+            <div className="mb-2 px-3 py-2 bg-white/5 border-l-2 border-indigo-500 rounded-r-lg flex items-center justify-between group">
+              <div className="text-[11px] text-neutral-400 italic truncate">
+                <span className="font-bold text-indigo-400 not-italic mr-1">Replying to {replyTo.name}:</span>
+                {replyTo.text}
+              </div>
+              <button onClick={() => setReplyTo(null)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                <X className="w-3 h-3 text-neutral-500" />
+              </button>
+            </div>
+          )}
+          {inputError && <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-2 ml-1">{inputError}</p>}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={inputText}
+              onChange={e => { setInputText(e.target.value); setInputError(''); }}
+              onKeyDown={e => e.key === 'Enter' && send()}
+              placeholder={isWaiting ? "Waiting for members..." : "Type a message..."}
+              disabled={isWaiting}
+              className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-[13px] text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500/50 transition-all disabled:opacity-50"
+            />
+            <button
+              onClick={send}
+              disabled={!inputText.trim() || isWaiting}
+              className="w-11 h-11 shrink-0 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:hover:bg-indigo-500 text-white rounded-xl flex items-center justify-center transition-colors"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Waiting Overlay */}
+        <AnimatePresence>
+          {isWaiting && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            >
+              <div className="bg-neutral-900 border border-white/10 p-6 rounded-3xl text-center max-w-sm w-full shadow-2xl">
+                <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-6 h-6 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-black text-white mb-2">Waiting for Members</h3>
+                <p className="text-sm text-neutral-400">Minimum 2 members are required to start chatting in this room.</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Report Modal */}
+      <AnimatePresence>
+        {showReport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-neutral-900 border border-red-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <ShieldAlert className="w-5 h-5 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white uppercase tracking-wider">Report User</h3>
+                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest">Violations lead to bans</p>
+                </div>
+              </div>
+
+              {reportStatus ? (
+                <div className="text-center py-6 text-emerald-400 font-bold">{reportStatus}</div>
+              ) : (
+                <form onSubmit={handleReport} className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Select User</label>
+                    <select
+                      value={reportUser}
+                      onChange={e => setReportUser(e.target.value)}
+                      className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-all"
+                      required
+                    >
+                      <option value="">-- Choose a user --</option>
+                      {roomState?.users?.filter((u: any) => u.name !== roomData.userName).map((u: any) => (
+                        <option key={u.uid || u.name} value={u.name}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Violation Type</label>
+                    <select
+                      value={reportReason}
+                      onChange={e => setReportReason(e.target.value)}
+                      className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-all"
+                      required
+                    >
+                      <option value="">-- Select violation --</option>
+                      {VIOLATION_OPTIONS.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button type="button" onClick={() => setShowReport(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors">
+                      Cancel
+                    </button>
+                    <button type="submit" className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors">
+                      Submit
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};

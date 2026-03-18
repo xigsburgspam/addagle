@@ -37,6 +37,7 @@ interface FootballMatch {
   league: string;
   streamUrl: string;
   live: boolean;
+  createdAt?: string;
 }
 
 export const AdminPanel: React.FC = () => {

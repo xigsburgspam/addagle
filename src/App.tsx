@@ -12,6 +12,8 @@ import { ShieldAlert } from 'lucide-react';
 import { auth } from './firebase';
 import { FootballLobby } from './components/FootballLobby';
 import { FootballRoom } from './components/FootballRoom';
+import { CustomChatLobby } from './components/CustomChatLobby';
+import { CustomChatRoom } from './components/CustomChatRoom';
 
 const AppContent: React.FC = () => {
   const { user, userData, loading } = useFirebase();
@@ -21,10 +23,41 @@ const AppContent: React.FC = () => {
   const [showFootballLobby, setShowFootballLobby] = useState(false);
   const [footballMatch,     setFootballMatch]     = useState<any>(null);
   const [footballName,      setFootballName]      = useState('');
+  const [showCustomChatLobby, setShowCustomChatLobby] = useState(false);
+  const [customChatRoomData, setCustomChatRoomData] = useState<any>(null);
 
-  const startChat = (mode: 'video' | 'text') => {
+  const [userName, setUserName] = useState('');
+
+  React.useEffect(() => {
+    const handleSwitchToDistrict = (e: any) => {
+      const { district, name } = e.detail;
+      setCustomChatRoomData({ 
+        action: 'create', 
+        userName: name, 
+        roomName: `district-${district}`, 
+        maxMembers: 100, 
+        mode: 'district', 
+        districtName: district 
+      });
+    };
+    window.addEventListener('switch-to-district', handleSwitchToDistrict);
+    return () => window.removeEventListener('switch-to-district', handleSwitchToDistrict);
+  }, []);
+
+  const startChat = (mode: 'video' | 'text', name: string) => {
+    setUserName(name);
     setChatMode(mode);
     setIsChatting(true);
+  };
+
+  const watchFootball = (name: string) => {
+    setUserName(name);
+    setShowFootballLobby(true);
+  };
+
+  const openCustomChat = (name: string) => {
+    setUserName(name);
+    setShowCustomChatLobby(true);
   };
 
   if (loading) {
@@ -44,12 +77,6 @@ const AppContent: React.FC = () => {
           </div>
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">{t.accessRevoked}</h1>
           <p className="text-neutral-400 font-medium mb-8">Your account has been permanently suspended for violating our community guidelines. This action is final.</p>
-          <button
-            onClick={() => auth.signOut()}
-            className="w-full py-4 bg-neutral-800 hover:bg-neutral-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all"
-          >
-            Sign Out
-          </button>
         </div>
       </div>
     );
@@ -64,13 +91,18 @@ const AppContent: React.FC = () => {
             element={
               <>
                 {isChatting && user && !userData?.isBlocked ? (
-                  <VideoChat mode={chatMode} onExit={() => setIsChatting(false)} />
+                  <VideoChat mode={chatMode} userName={userName} onExit={() => setIsChatting(false)} />
                 ) : (
-                  <HomePage onStart={startChat} onWatchFootball={() => setShowFootballLobby(true)} />
+                  <HomePage 
+                    onStart={startChat} 
+                    onWatchFootball={watchFootball} 
+                    onCustomChat={openCustomChat}
+                  />
                 )}
                 {showFootballLobby && (
                   <FootballLobby
                     onClose={() => setShowFootballLobby(false)}
+                    userName={userName}
                     onEnter={(match, name) => {
                       setFootballMatch(match);
                       setFootballName(name);
@@ -84,6 +116,33 @@ const AppContent: React.FC = () => {
                       match={footballMatch}
                       userName={footballName}
                       onLeave={() => setFootballMatch(null)}
+                    />
+                  </div>
+                )}
+                {showCustomChatLobby && (
+                  <CustomChatLobby
+                    onClose={() => setShowCustomChatLobby(false)}
+                    initialName={userName}
+                    onJoinGlobal={(name) => {
+                      setCustomChatRoomData({ action: 'global', userName: name });
+                      setShowCustomChatLobby(false);
+                    }}
+                    onCreateRoom={(name, roomName, maxMembers, mode, districtName) => {
+                      setCustomChatRoomData({ action: 'create', userName: name, roomName: mode === 'district' ? `district-${districtName}` : roomName, maxMembers, mode, districtName });
+                      setShowCustomChatLobby(false);
+                    }}
+                    onJoinRoom={(name, roomName) => {
+                      setCustomChatRoomData({ action: 'join', userName: name, roomName });
+                      setShowCustomChatLobby(false);
+                    }}
+                  />
+                )}
+                {customChatRoomData && (
+                  <div className="fixed inset-0 z-[150]">
+                    <CustomChatRoom
+                      roomData={customChatRoomData}
+                      onLeave={() => setCustomChatRoomData(null)}
+                      onSwitchRoom={(newData) => setCustomChatRoomData(newData)}
                     />
                   </div>
                 )}

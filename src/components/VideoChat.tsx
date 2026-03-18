@@ -11,12 +11,15 @@ import { Chat } from './Chat';
 import { StatsDisplay } from './StatsDisplay';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
+import { getDistrict } from '../utils/location';
+
 interface VideoChatProps {
   onExit: () => void;
   mode: 'video' | 'text';
+  userName?: string;
 }
 
-export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
+export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) => {
   const { user, userData } = useFirebase();
   const { t } = useLanguage();
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -67,6 +70,15 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   useEffect(() => {
     const newSocket = io();
     setSocket(newSocket);
+
+    const onConnect = () => {
+      getDistrict().then(district => {
+        newSocket.emit('set-district', { district });
+      }).catch(() => {});
+    };
+
+    if (newSocket.connected) onConnect();
+    else newSocket.once('connect', onConnect);
 
     const peer = new Peer({
       debug: 3,
