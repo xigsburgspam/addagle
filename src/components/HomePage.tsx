@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X, MapPin } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 import { containsBanned } from '../constants';
@@ -36,7 +36,7 @@ const DISTRICT_POSITIONS: Record<string, { x: number; y: number }> = {
   "Khagrachhari": { x: 98, y: 65 }, "Rangamati": { x: 99, y: 75 }, "Bandarban": { x: 98, y: 95 }, "Cox's Bazar": { x: 95, y: 99 }
 };
 
-const DisplayNamePrompt: React.FC<{ user: any; onConfirm: (name: string, save: boolean) => void; onClose: () => void }> = ({ user, onConfirm, onClose }) => {
+const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => void; onClose: () => void }> = ({ onConfirm, onClose }) => {
   const [name, setName] = useState('');
   const [save, setSave] = useState(false);
   const [error, setError] = useState('');
@@ -45,10 +45,6 @@ const DisplayNamePrompt: React.FC<{ user: any; onConfirm: (name: string, save: b
     const trimmed = name.trim();
     if (trimmed.length < 2) {
       setError('Name must be at least 2 characters');
-      return;
-    }
-    if (trimmed.toLowerCase() === 'admin' && user?.email !== 'edublitz71@gmail.com') {
-      setError('The username "admin" is reserved for the system administrator.');
       return;
     }
     if (containsBanned(trimmed)) {
@@ -439,6 +435,7 @@ export const HomePage: React.FC<{
               </div>
             )}
 
+
             {/* Stats Bar */}
             <div className="mt-12 flex flex-wrap justify-center gap-3 w-full">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
@@ -472,90 +469,6 @@ export const HomePage: React.FC<{
                 <span className="text-xs font-black text-neutral-400 tabular-nums">{stats.totalAccounts.toLocaleString()}</span>
               </div>
             </div>
-
-            {/* District Activity Section */}
-            <section className="mt-24 w-full">
-              <div className="flex flex-col md:flex-row items-end justify-between gap-8 mb-12">
-                <div className="max-w-2xl">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live District Pulse</span>
-                  </div>
-                  <h2 className="text-5xl md:text-6xl font-black text-white uppercase tracking-tighter leading-[0.9]">
-                    Who's Active <br />
-                    <span className="text-emerald-500">In Your Area?</span>
-                  </h2>
-                </div>
-                <p className="text-neutral-500 text-sm font-medium max-w-xs md:text-right">
-                  Real-time activity tracking across all 64 districts. See where the conversation is happening right now.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* Map Visualization */}
-                <div className="lg:col-span-7 bg-neutral-900/30 border border-white/5 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-                  <div className="relative z-10">
-                    <BangladeshMap districtUsers={stats.districtUsers} />
-                  </div>
-                </div>
-
-                {/* District Stats List */}
-                <div className="lg:col-span-5 space-y-4">
-                  <div className="bg-neutral-900/50 border border-white/5 rounded-[32px] p-6">
-                    <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
-                      <MapPin className="w-3 h-3 text-emerald-500" />
-                      Top Active Districts
-                    </h3>
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                      {Object.entries((stats as any).districtStats || {})
-                        .sort(([, a]: any, [, b]: any) => (b.total) - (a.total))
-                        .slice(0, 15)
-                        .map(([district, data]: any) => (
-                          <div key={district} className="group flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.05] hover:border-emerald-500/30 transition-all">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-neutral-800 flex items-center justify-center text-[10px] font-black text-neutral-400 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
-                                {district.substring(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <h4 className="text-sm font-black text-white uppercase tracking-tight">{district}</h4>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[8px] text-emerald-500/70 font-black uppercase tracking-widest">{data.joined} Joined</span>
-                                  <span className="text-[8px] text-amber-500/70 font-black uppercase tracking-widest">{data.waiting} Waiting</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-xl font-black text-emerald-500 tabular-nums">{data.total}</span>
-                              <p className="text-[8px] text-neutral-600 font-black uppercase tracking-widest">Total</p>
-                            </div>
-                          </div>
-                        ))}
-                      {Object.keys(stats.districtUsers).length === 0 && (
-                        <div className="text-center py-12">
-                          <Ghost className="w-12 h-12 text-neutral-800 mx-auto mb-4" />
-                          <p className="text-neutral-600 text-[10px] font-black uppercase tracking-widest">No live activity detected yet</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Quick Stats Card */}
-                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-[32px] p-8 text-black relative overflow-hidden">
-                    <div className="relative z-10">
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] mb-1 opacity-70">Total Coverage</h3>
-                      <p className="text-4xl font-black tracking-tighter mb-4">
-                        {Object.keys(stats.districtUsers).length} <span className="text-sm uppercase tracking-widest opacity-70">Districts</span>
-                      </p>
-                      <p className="text-xs font-bold leading-relaxed opacity-80">
-                        Connecting people from every corner of the country. Join the pulse and find someone new from your area.
-                      </p>
-                    </div>
-                    <Zap className="absolute -bottom-6 -right-6 w-32 h-32 opacity-10" />
-                  </div>
-                </div>
-              </div>
-            </section>
           </motion.div>
         </div>
       </main>
@@ -623,7 +536,6 @@ export const HomePage: React.FC<{
         )}
         {showNamePrompt && (
           <DisplayNamePrompt
-            user={user}
             onConfirm={handleNameConfirm}
             onClose={() => {
               setShowNamePrompt(false);
