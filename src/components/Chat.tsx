@@ -146,12 +146,17 @@ export const Chat: React.FC<ChatProps> = ({
   }, [inputText, socket, roomId, currentUserId, replyingTo]);
 
   const react = useCallback((messageId: string, emoji: string) => {
-    socket.emit('message-reaction', { roomId, messageId, emoji });
-    setMessages(p => p.map(m => m.id === messageId ? { ...m, reaction: emoji } : m));
-    setNewReactionId(messageId);
-    setTimeout(() => setNewReactionId(null), 600);
+    const msg = messages.find(m => m.id === messageId);
+    const isSame = msg?.reaction === emoji;
+    const newEmoji = isSame ? null : emoji;
+    socket.emit('message-reaction', { roomId, messageId, emoji: newEmoji });
+    setMessages(p => p.map(m => m.id === messageId ? { ...m, reaction: newEmoji } : m));
+    if (!isSame) {
+      setNewReactionId(messageId);
+      setTimeout(() => setNewReactionId(null), 600);
+    }
     setMenuId(null);
-  }, [socket, roomId]);
+  }, [socket, roomId, messages]);
 
   const scrollToMsg = (id: string) => {
     const el = msgRefs.current[id];
