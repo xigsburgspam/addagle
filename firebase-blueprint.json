@@ -49,6 +49,20 @@
         "status": { "type": "string", "enum": ["online", "video", "text"] },
         "lastSeen": { "type": "string", "format": "date-time" }
       }
+    },
+    "FootballMatch": {
+      "title": "Football Match",
+      "description": "Live football match stream information",
+      "type": "object",
+      "properties": {
+        "teamA": { "type": "string" },
+        "teamB": { "type": "string" },
+        "league": { "type": "string" },
+        "streamUrl": { "type": "string" },
+        "live": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teamA", "teamB", "league", "streamUrl", "live", "createdAt"]
     }
   },
   "firestore": {
@@ -67,6 +81,10 @@
     "/presence/{userId}": {
       "schema": "Presence",
       "description": "User presence tracking"
+    },
+    "/football_matches/{matchId}": {
+      "schema": "FootballMatch",
+      "description": "Football matches"
     }
   }
 }

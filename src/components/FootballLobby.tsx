@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Tv2, Trophy, Loader2, ArrowRight, User, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
+import { collection, query, where, onSnapshot, db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
 const BANNED_WORDS = [
   'sex','fuck','suck','kiss','bongo','boltu','hasina','chudina','chudi',
@@ -20,6 +22,7 @@ interface Match {
   league: string;
   streamUrl: string;
   live: boolean;
+  createdAt?: string;
 }
 
 interface Props {
@@ -37,10 +40,18 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter }) => {
   const [step,      setStep]      = useState<'list' | 'name'>('list');
 
   useEffect(() => {
-    fetch('/api/football/matches')
-      .then(r => r.json())
-      .then(data => { setMatches(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    const qMatches = query(collection(db, 'football_matches'), where('live', '==', true));
+    const unsubscribe = onSnapshot(qMatches, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
+      data.sort((a, b) => (b.createdAt?.localeCompare(a.createdAt || '') || 0));
+      setMatches(data);
+      setLoading(false);
+    }, (error) => {
+      setLoading(false);
+      handleFirestoreError(error, OperationType.LIST, 'football_matches');
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleEnter = (match: Match) => {

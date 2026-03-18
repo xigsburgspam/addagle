@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp } from '../firebase';
+import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc } from '../firebase';
 import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -79,17 +79,17 @@ export const AdminPanel: React.FC = () => {
     fetchRooms();
     const roomInterval = setInterval(fetchRooms, 5000);
 
-    const fetchMatches = async () => {
-      try {
-        const res = await fetch('/api/football/matches/all');
-        setMatches(await res.json());
-      } catch {}
-    };
-    fetchMatches();
+    const qMatches = query(collection(db, 'football_matches'));
+    const unsubscribeMatches = onSnapshot(qMatches, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FootballMatch));
+      data.sort((a, b) => (b.createdAt?.localeCompare(a.createdAt || '') || 0));
+      setMatches(data);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'football_matches'));
 
     return () => {
       unsubscribeReports();
       unsubscribeBlocked();
+      unsubscribeMatches();
       clearInterval(roomInterval);
     };
   }, [isAdmin]);
@@ -132,33 +132,36 @@ export const AdminPanel: React.FC = () => {
     if (!teamA || !teamB || !league || !streamUrl) { setMatchMsg('All fields required.'); return; }
     setAddingMatch(true);
     try {
-      const res = await fetch('/api/football/matches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamA, teamB, league, streamUrl }),
+      await addDoc(collection(db, 'football_matches'), {
+        teamA, teamB, league, streamUrl,
+        live: true,
+        createdAt: new Date().toISOString()
       });
-      const data = await res.json();
-      setMatches(p => [...p, { id: data.id, ...newMatch, live: true }]);
       setNewMatch({ teamA: '', teamB: '', league: '', streamUrl: '' });
       setMatchMsg('Match added!');
       setTimeout(() => setMatchMsg(''), 3000);
-    } catch { setMatchMsg('Failed to add match.'); }
+    } catch (e) {
+      setMatchMsg('Failed to add match.');
+      handleFirestoreError(e, OperationType.CREATE, 'football_matches');
+    }
     setAddingMatch(false);
   };
 
   const deleteMatch = async (id: string) => {
     if (!confirm('Delete this match?')) return;
-    await fetch(`/api/football/matches/${id}`, { method: 'DELETE' });
-    setMatches(p => p.filter(m => m.id !== id));
+    try {
+      await deleteDoc(doc(db, 'football_matches', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `football_matches/${id}`);
+    }
   };
 
   const toggleLive = async (id: string, live: boolean) => {
-    await fetch(`/api/football/matches/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ live: !live }),
-    });
-    setMatches(p => p.map(m => m.id === id ? { ...m, live: !live } : m));
+    try {
+      await updateDoc(doc(db, 'football_matches', id), { live: !live });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `football_matches/${id}`);
+    }
   };
 
   if (!isAdmin) {

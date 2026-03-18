@@ -75,6 +75,16 @@ service cloud.firestore {
              data.timestamp is timestamp;
     }
 
+    function isValidFootballMatch(data) {
+      return data.keys().hasAll(['teamA', 'teamB', 'league', 'streamUrl', 'live', 'createdAt']) &&
+             data.teamA is string && data.teamA.size() > 0 && data.teamA.size() < 100 &&
+             data.teamB is string && data.teamB.size() > 0 && data.teamB.size() < 100 &&
+             data.league is string && data.league.size() > 0 && data.league.size() < 100 &&
+             data.streamUrl is string && data.streamUrl.size() > 0 && data.streamUrl.size() < 1000 &&
+             data.live is bool &&
+             data.createdAt is string;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -105,6 +115,13 @@ service cloud.firestore {
     match /presence/{userId} {
       allow read: if true;
       allow write: if isOwner(userId) && isNotBlocked();
+    }
+
+    match /football_matches/{matchId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidFootballMatch(request.resource.data);
+      allow update: if isAdmin() && isValidFootballMatch(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }

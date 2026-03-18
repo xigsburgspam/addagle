@@ -9,7 +9,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { readFileSync } from 'fs';
 
 // Load firebase config — resolve relative to source root, works in both dev and prod
-const configPath = new URL('../firebase-applet-config.json', import.meta.url);
+const configPath = new URL('./firebase-applet-config.json', import.meta.url);
 const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
 
 // Initialize Firebase Admin (only once)
@@ -273,63 +273,6 @@ async function startServer() {
 
   // API routes
   app.use(express.json());
-
-  // Public: only live matches (for users)
-  app.get('/api/football/matches', async (req, res) => {
-    try {
-      const snap = await adminDb.collection('football_matches').where('live', '==', true).get();
-      const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      res.json(matches);
-    } catch (e) {
-      res.json([]);
-    }
-  });
-
-  // Admin: all matches regardless of live status
-  app.get('/api/football/matches/all', async (req, res) => {
-    try {
-      const snap = await adminDb.collection('football_matches').orderBy('createdAt', 'desc').get();
-      const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      res.json(matches);
-    } catch (e) {
-      res.json([]);
-    }
-  });
-
-  // Admin: add match
-  app.post('/api/football/matches', async (req, res) => {
-    try {
-      const { teamA, teamB, league, streamUrl } = req.body;
-      const ref = await adminDb.collection('football_matches').add({
-        teamA, teamB, league, streamUrl,
-        live: true,
-        createdAt: new Date().toISOString(),
-      });
-      res.json({ id: ref.id });
-    } catch (e) {
-      res.status(500).json({ error: 'Failed to add match' });
-    }
-  });
-
-  // Admin: delete match
-  app.delete('/api/football/matches/:id', async (req, res) => {
-    try {
-      await adminDb.collection('football_matches').doc(req.params.id).delete();
-      res.json({ ok: true });
-    } catch (e) {
-      res.status(500).json({ error: 'Failed' });
-    }
-  });
-
-  // Admin: toggle live
-  app.patch('/api/football/matches/:id', async (req, res) => {
-    try {
-      await adminDb.collection('football_matches').doc(req.params.id).update(req.body);
-      res.json({ ok: true });
-    } catch (e) {
-      res.status(500).json({ error: 'Failed' });
-    }
-  });
 
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
