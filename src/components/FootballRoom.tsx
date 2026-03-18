@@ -44,6 +44,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const [inputError,  setInputError]  = useState('');
   const [fullscreen,  setFullscreen]  = useState(false);
   const [streamInPopup, setStreamInPopup] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const scrollRef    = useRef<HTMLDivElement>(null);
@@ -201,7 +202,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
         <div className="shrink-0 w-full bg-black relative group" style={{ height: '45%' }}>
           <iframe
             ref={iframeRef}
-            src={match.streamUrl}
+            src={useProxy ? `/api/proxy-stream?url=${encodeURIComponent(match.streamUrl)}` : match.streamUrl}
             className="w-full h-full border-0"
             allowFullScreen
             allow="autoplay; fullscreen; encrypted-media"
@@ -212,17 +213,25 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
           <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             <div className="bg-neutral-900/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center max-w-xs pointer-events-auto shadow-2xl">
               <p className="text-xs text-neutral-300 mb-3 leading-relaxed">
-                If the video is blank or refusing to connect (anti-iframe protection), you can open it in a separate popup window.
+                If the video is blank or refusing to connect (anti-iframe protection), you can try the proxy player or open it in a separate popup window.
               </p>
-              <button
-                onClick={() => {
-                  window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
-                  setStreamInPopup(true);
-                }}
-                className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
-              >
-                Open Stream in Popup
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setUseProxy(!useProxy)}
+                  className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
+                >
+                  {useProxy ? 'Use Standard Player' : 'Try Proxy Player (Bypass)'}
+                </button>
+                <button
+                  onClick={() => {
+                    window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
+                    setStreamInPopup(true);
+                  }}
+                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
+                >
+                  Open Stream in Popup
+                </button>
+              </div>
             </div>
           </div>
         </div>

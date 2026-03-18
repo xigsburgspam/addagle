@@ -33,6 +33,50 @@ async function startServer() {
   });
   const PORT = 3000;
 
+  // Proxy endpoint for anti-iframe bypass
+  app.get('/api/proxy-stream', async (req, res) => {
+    try {
+      const targetUrl = req.query.url as string;
+      if (!targetUrl) {
+        return res.status(400).send('Missing url parameter');
+      }
+
+      const response = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+        }
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (contentType.includes('text/html')) {
+        let html = await response.text();
+        
+        // Inject base tag to fix relative URLs
+        const targetBase = new URL('.', targetUrl).href;
+        if (html.includes('<head>')) {
+          html = html.replace('<head>', `<head><base href="${targetBase}">`);
+        } else {
+          html = `<head><base href="${targetBase}"></head>` + html;
+        }
+
+        res.setHeader('Content-Type', contentType);
+        // Do not set X-Frame-Options or CSP
+        res.send(html);
+      } else {
+        // For non-HTML, just pipe it
+        res.setHeader('Content-Type', contentType);
+        const arrayBuffer = await response.arrayBuffer();
+        res.send(Buffer.from(arrayBuffer));
+      }
+    } catch (e) {
+      console.error('Proxy error:', e);
+      res.status(500).send('Proxy error');
+    }
+  });
+
   // Matchmaking queues
   let waitingVideoUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
   let waitingTextUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
