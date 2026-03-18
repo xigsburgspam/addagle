@@ -74,10 +74,15 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter }) => {
     setChecking(true);
     setNameError('');
 
-    const sock = io();
-    sock.once('connect', () => {
+    const sock = io({ forceNew: true });
+    const onConnect = () => {
       sock.emit('football-check-name', { matchId: selected!.id, name: trimmed });
-    });
+    };
+    if (sock.connected) {
+      onConnect();
+    } else {
+      sock.once('connect', onConnect);
+    }
     sock.once('football-name-result', ({ available }: { available: boolean }) => {
       sock.disconnect();
       setChecking(false);

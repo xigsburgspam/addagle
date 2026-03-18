@@ -43,6 +43,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const [inputText,   setInputText]   = useState('');
   const [inputError,  setInputError]  = useState('');
   const [fullscreen,  setFullscreen]  = useState(false);
+  const [streamInPopup, setStreamInPopup] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const scrollRef    = useRef<HTMLDivElement>(null);
@@ -62,14 +63,21 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   };
 
   useEffect(() => {
-    const sock = io();
+    const sock = io({ forceNew: true });
     setSocket(sock);
 
-    sock.once('connect', () => {
+    const onConnect = () => {
       sock.emit('football-join', { matchId: match.id, name: userName });
-    });
+    };
+
+    if (sock.connected) {
+      onConnect();
+    } else {
+      sock.once('connect', onConnect);
+    }
 
     sock.on('football-chat', ({ name, text, ts }: { name: string; text: string; ts: number }) => {
+      if (name === userName) return; // Don't add own message twice
       addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name, text, ts });
       clearTypingFor(name);
     });
@@ -168,10 +176,19 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.07]">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.07] hidden sm:flex">
             <Users className="w-3 h-3 text-neutral-500" />
             <span className="text-[10px] font-semibold text-neutral-400">{userName}</span>
           </div>
+          <button
+            onClick={() => {
+              window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
+              setStreamInPopup(true);
+            }}
+            className="px-3 py-1.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-widest transition-colors"
+          >
+            Pop Out
+          </button>
           <button onClick={toggleFullscreen}
             className="w-8 h-8 rounded-full bg-white/6 hover:bg-white/12 flex items-center justify-center transition-colors cursor-pointer">
             {fullscreen ? <Minimize2 className="w-4 h-4 text-neutral-400" /> : <Maximize2 className="w-4 h-4 text-neutral-400" />}
@@ -180,16 +197,46 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
       </div>
 
       {/* Stream — top 45% */}
-      <div className="shrink-0 w-full bg-black" style={{ height: '45%' }}>
-        <iframe
-          ref={iframeRef}
-          src={match.streamUrl}
-          className="w-full h-full border-0"
-          allowFullScreen
-          allow="autoplay; fullscreen; encrypted-media"
-          title="Match Stream"
-        />
-      </div>
+      {!streamInPopup ? (
+        <div className="shrink-0 w-full bg-black relative group" style={{ height: '45%' }}>
+          <iframe
+            ref={iframeRef}
+            src={match.streamUrl}
+            className="w-full h-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media"
+            title="Match Stream"
+          />
+          
+          {/* Overlay for anti-iframe fallback */}
+          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="bg-neutral-900/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center max-w-xs pointer-events-auto shadow-2xl">
+              <p className="text-xs text-neutral-300 mb-3 leading-relaxed">
+                If the video is blank or refusing to connect (anti-iframe protection), you can open it in a separate popup window.
+              </p>
+              <button
+                onClick={() => {
+                  window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
+                  setStreamInPopup(true);
+                }}
+                className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
+              >
+                Open Stream in Popup
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="shrink-0 w-full bg-neutral-900 flex flex-col items-center justify-center p-4 border-b border-white/[0.07]">
+          <p className="text-xs text-neutral-400 mb-3">Stream is playing in a popup window.</p>
+          <button
+            onClick={() => setStreamInPopup(false)}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
+          >
+            Bring Stream Back
+          </button>
+        </div>
+      )}
 
       <div className="h-px bg-white/[0.07] shrink-0" />
 
