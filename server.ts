@@ -4,21 +4,17 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, doc, setDoc, addDoc, increment } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 
 // Load firebase config — resolve relative to source root, works in both dev and prod
 const configPath = new URL('./firebase-applet-config.json', import.meta.url);
 const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
 
-// Initialize Firebase Admin (only once)
-if (!getApps().length) {
-  initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
-}
-const adminDb = getFirestore(firebaseConfig.firestoreDatabaseId);
+// Initialize Firebase (only once)
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -98,7 +94,7 @@ async function startServer() {
   const reportedPairs = new Set<string>();
 
   // Load reports on startup
-  adminDb.collection('reports').get().then(snapshot => {
+  getDocs(collection(db, 'reports')).then(snapshot => {
     snapshot.forEach(doc => {
       const data = doc.data();
       reportedPairs.add(`${data.reporterId}:${data.reportedId}`);
@@ -187,7 +183,7 @@ async function startServer() {
 
     // Increment total text chats
     totalTextChats++;
-    adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
   };
 
   // Timer interval for custom rooms
@@ -269,10 +265,10 @@ async function startServer() {
         else totalTextChats++;
 
         // Persist to Firestore
-        adminDb.collection('stats').doc('global').set(
+        setDoc(doc(db, 'stats', 'global'),
           isVideo
-            ? { totalVideoChats: FieldValue.increment(1) }
-            : { totalTextChats: FieldValue.increment(1) },
+            ? { totalVideoChats: increment(1) }
+            : { totalTextChats: increment(1) },
           { merge: true }
         ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
@@ -407,7 +403,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('football-message', ({ matchId, text }: { matchId: string; text: string }) => {
@@ -454,7 +450,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-create', ({ roomName, maxMembers, mode, district, name, uid, email }) => {
@@ -488,7 +484,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-join', ({ roomName, name, uid, email }) => {
@@ -522,7 +518,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-join-district', ({ district, name, uid, email }) => {
@@ -569,7 +565,7 @@ async function startServer() {
 
       if (violator && reporter) {
         try {
-          await adminDb.collection('reports').add({
+          await addDoc(collection(db, 'reports'), {
             reporterId: reporter.uid || 'anonymous',
             reporterEmail: reporter.email || 'anonymous',
             reporterName: reporter.name,
@@ -578,7 +574,7 @@ async function startServer() {
             reportedName: violator.name,
             reason,
             roomId,
-            timestamp: FieldValue.serverTimestamp()
+            timestamp: new Date() // FieldValue.serverTimestamp() is not available in client SDK directly, use Date
           });
           reportedPairs.add(`${reporter.uid || 'anonymous'}:${violator.uid || 'anonymous'}`);
           console.log(`Report submitted: ${reporterName} reported ${violatorName}`);
