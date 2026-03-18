@@ -88,8 +88,8 @@ async function startServer() {
   });
 
   // Matchmaking queues
-  let videoQueue: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean }[] = [];
-  let textQueue: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean }[] = [];
+  let videoQueue: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean, district?: string }[] = [];
+  let textQueue: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean, district?: string }[] = [];
 
   const blockedUsers = new Map<string, Set<string>>(); // uid -> Set of reported uids
 
@@ -231,13 +231,8 @@ async function startServer() {
     });
 
     // Join matchmaking queue
-    socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode, district, name }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text', district: string, name: string }) => {
-      console.log(`Join queue request: ${socket.id}, mode: ${mode}, name: ${name}, district: ${district}, peerId: ${peerId}, UID: ${uid}, Admin: ${isAdmin}`);
-      
-      if (!peerId) {
-        console.error(`Join queue failed: No peerId for socket ${socket.id}`);
-        return;
-      }
+    socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode, district }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text', district?: string }) => {
+      console.log('User joined queue:', socket.id, 'Mode:', mode, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin, 'District:', district);
 
       // Store UID and Email on socket for reporting
       (socket as any)._uid = uid;
@@ -259,6 +254,9 @@ async function startServer() {
       // Remove self if already in queue
       const selfIndex = queue.findIndex(u => u.socketId === socket.id);
       if (selfIndex !== -1) queue.splice(selfIndex, 1);
+
+      // Add to queue with district
+      queue.push({ socketId: socket.id, peerId, uid, email, isAdmin, district });
 
       // Find a partner who is not blocked
       const partnerIndex = queue.findIndex(u => {
@@ -308,12 +306,6 @@ async function startServer() {
         ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
         // Notify both users
-        socket.emit('match-found', { roomId, partnerPeerId: partner.peerId, partnerName: partner.name });
-        io.sockets.sockets.get(partner.socketId)?.emit('match-found', { roomId, partnerPeerId: peerId, partnerName: name });
-      } else {
-        // No partner found, add to queue
-        queue.push({ socketId: socket.id, peerId, uid, email, isAdmin, name });
-      }
         io.to(socket.id).emit('matched', {
           partnerId: partner.socketId,
           partnerPeerId: partner.peerId,
@@ -595,56 +587,62 @@ async function startServer() {
     socket.on('custom-report', async ({ violatorName, reason }) => {
       const roomId = (socket as any)._customRoom;
       const reporterName = (socket as any)._customName;
-      console.log(`Custom report received: ${reporterName} reporting ${violatorName} in room ${roomId}`);
+      const reporterUid = (socket as any)._uid;
+      const reporterEmail = (socket as any)._email;
+      
+      console.log(`[CUSTOM REPORT] Received: ${reporterName} (${reporterUid}) reporting ${violatorName} in room ${roomId}`);
       
       if (!roomId || !reporterName) {
-        console.log('Custom report failed: roomId or reporterName missing');
+        console.log('[CUSTOM REPORT] Failed: roomId or reporterName missing from socket');
         return;
       }
       
       const room = customRooms.get(roomId);
       if (!room) {
-        console.log(`Custom report failed: Room ${roomId} not found`);
+        console.log(`[CUSTOM REPORT] Failed: Room ${roomId} not found in customRooms map`);
         return;
       }
 
       const violator = room.users.find(u => u.name === violatorName);
       const reporter = room.users.find(u => u.name === reporterName);
 
-      // Always save the report — use room lookup for full data, fallback to socket properties
-      try {
-        const reporterId = reporter?.uid || (socket as any)._uid || 'anonymous';
-        const reporterEmail = reporter?.email || (socket as any)._email || 'anonymous';
-        const reportedId = violator?.uid || 'anonymous';
-        const reportedEmail = violator?.email || 'anonymous';
-
-        // Update in-memory blocked matches if we have both UIDs
-        if (reporter?.uid && violator?.uid) {
-          if (!blockedUsers.has(reporter.uid)) blockedUsers.set(reporter.uid, new Set());
-          blockedUsers.get(reporter.uid)!.add(violator.uid);
-          if (!blockedUsers.has(violator.uid)) blockedUsers.set(violator.uid, new Set());
-          blockedUsers.get(violator.uid)!.add(reporter.uid);
+      if (violator && reporter) {
+        try {
+          const reportData = {
+            reporterId: reporter.uid || reporterUid || 'anonymous',
+            reporterEmail: reporter.email || reporterEmail || 'anonymous',
+            reporterName: reporter.name,
+            reportedId: violator.uid || 'anonymous',
+            reportedEmail: violator.email || 'anonymous',
+            reportedName: violator.name,
+            reason,
+            roomId,
+            type: 'custom',
+            timestamp: FieldValue.serverTimestamp()
+          };
+          
+          console.log('[CUSTOM REPORT] Saving to Firestore:', JSON.stringify(reportData));
+          await adminDb.collection('reports').add(reportData);
+          console.log(`[CUSTOM REPORT] Success: ${reporterName} reported ${violatorName}`);
+          
+          // Update blocked users map
+          if (reportData.reportedId !== 'anonymous' && reportData.reporterId !== 'anonymous') {
+            if (!blockedUsers.has(reportData.reporterId)) {
+              blockedUsers.set(reportData.reporterId, new Set());
+            }
+            blockedUsers.get(reportData.reporterId)!.add(reportData.reportedId);
+            
+            if (!blockedUsers.has(reportData.reportedId)) {
+              blockedUsers.set(reportData.reportedId, new Set());
+            }
+            blockedUsers.get(reportData.reportedId)!.add(reportData.reporterId);
+          }
+        } catch (e) {
+          console.error('[CUSTOM REPORT] Firestore Error:', e);
         }
-
-        await adminDb.collection('reports').add({
-          reporterId,
-          reporterEmail,
-          reporterName: reporterName,
-          reportedId,
-          reportedEmail,
-          reportedName: violatorName,
-          reason,
-          roomId,
-          source: 'custom-chat',
-          timestamp: FieldValue.serverTimestamp()
-        });
-        console.log(`Report submitted to Firestore: ${reporterName} reported ${violatorName} in room ${roomId}`);
-      } catch (e) {
-        console.error('Failed to save custom report:', e);
-      }
-
-      if (!violator || !reporter) {
-        console.log(`Custom report note: Violator (${violatorName}) or Reporter (${reporterName}) not found live in room — report still saved`);
+      } else {
+        console.log(`[CUSTOM REPORT] Failed: Violator (${violatorName}) or Reporter (${reporterName}) not found in room users list`);
+        console.log(`[CUSTOM REPORT] Room users:`, room.users.map(u => u.name).join(', '));
       }
     });
 
@@ -779,15 +777,42 @@ async function startServer() {
     const footballChatting = Array.from(footballRooms.values()).reduce((acc, r) => acc + r.names.size, 0);
     const onlineUsers = io.engine.clientsCount;
 
-    // District room user counts (for users in district chat rooms)
-    const districtRoomUsers: Record<string, number> = {};
-    const districtWaiting: Record<string, boolean> = {};
-    for (const [roomId, room] of customRooms.entries()) {
-      if (room.mode === 'district' && room.district && room.users.length > 0) {
-        districtRoomUsers[room.district] = room.users.length;
-        districtWaiting[room.district] = room.users.length < 2;
-      }
+    // Calculate detailed district stats
+    const districtStats: Record<string, { total: number, waiting: number, joined: number }> = {};
+    
+    // Initialize with current total district users
+    for (const [district, count] of districtUsers.entries()) {
+      districtStats[district] = { total: count, waiting: 0, joined: 0 };
     }
+
+    // Count waiting users from queues
+    [...videoQueue, ...textQueue].forEach(u => {
+      if (u.district && districtStats[u.district]) {
+        districtStats[u.district].waiting++;
+      }
+    });
+
+    // Count joined users from active matches
+    Array.from(rooms.values()).forEach(room => {
+      room.users.forEach(socketId => {
+        const socket = io.sockets.sockets.get(socketId);
+        const district = (socket as any)?._district;
+        if (district && districtStats[district]) {
+          districtStats[district].joined++;
+        }
+      });
+    });
+
+    // Count joined users from custom rooms
+    Array.from(customRooms.values()).forEach(room => {
+      room.users.forEach(u => {
+        const socket = io.sockets.sockets.get(u.socketId);
+        const district = (socket as any)?._district;
+        if (district && districtStats[district]) {
+          districtStats[district].joined++;
+        }
+      });
+    });
 
     res.json({
       onlineUsers,
@@ -798,8 +823,7 @@ async function startServer() {
       totalVideoChats,
       totalTextChats,
       districtUsers: Object.fromEntries(districtUsers),
-      districtRoomUsers,
-      districtWaiting
+      districtStats
     });
   });
 

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 import { containsBanned } from '../constants';
@@ -19,10 +19,24 @@ const BANGLADESH_DISTRICTS = [
   "Sherpur", "Jamalpur", "Netrokona", "Mymensingh"
 ];
 
-// Accurate geographical positions for all 64 districts of Bangladesh
-// x: 0-100 (west to east), y: 0-100 (north to south)
+// Approximate relative positions (0-100) for the SVG map
+const DISTRICT_POSITIONS: Record<string, { x: number; y: number }> = {
+  "Panchagarh": { x: 25, y: 5 }, "Thakurgaon": { x: 20, y: 10 }, "Nilphamari": { x: 35, y: 10 }, "Lalmonirhat": { x: 45, y: 12 }, "Kurigram": { x: 55, y: 15 },
+  "Dinajpur": { x: 28, y: 18 }, "Rangpur": { x: 40, y: 18 }, "Gaibandha": { x: 50, y: 22 }, "Joypurhat": { x: 35, y: 28 }, "Naogaon": { x: 25, y: 32 },
+  "Bogra": { x: 45, y: 32 }, "Chapai Nawabganj": { x: 10, y: 40 }, "Rajshahi": { x: 22, y: 45 }, "Natore": { x: 35, y: 45 }, "Sirajganj": { x: 48, y: 42 },
+  "Pabna": { x: 38, y: 55 }, "Kushtia": { x: 25, y: 58 }, "Meherpur": { x: 15, y: 62 }, "Chuadanga": { x: 18, y: 68 }, "Jhenaidah": { x: 28, y: 68 },
+  "Magura": { x: 35, y: 72 }, "Rajbari": { x: 45, y: 65 }, "Faridpur": { x: 50, y: 72 }, "Manikganj": { x: 55, y: 62 }, "Tangail": { x: 58, y: 48 },
+  "Jamalpur": { x: 58, y: 35 }, "Sherpur": { x: 65, y: 28 }, "Mymensingh": { x: 70, y: 35 }, "Netrokona": { x: 80, y: 32 }, "Kishoreganj": { x: 82, y: 45 },
+  "Sunamganj": { x: 90, y: 25 }, "Sylhet": { x: 95, y: 35 }, "Moulvibazar": { x: 92, y: 45 }, "Habiganj": { x: 88, y: 52 }, "Brahmanbaria": { x: 80, y: 58 },
+  "Narsingdi": { x: 72, y: 62 }, "Gazipur": { x: 65, y: 58 }, "Dhaka": { x: 65, y: 68 }, "Narayanganj": { x: 72, y: 72 }, "Munshiganj": { x: 68, y: 78 },
+  "Shariatpur": { x: 75, y: 82 }, "Madaripur": { x: 62, y: 82 }, "Gopalganj": { x: 55, y: 85 }, "Narail": { x: 42, y: 78 }, "Jessore": { x: 30, y: 78 },
+  "Satkhira": { x: 28, y: 90 }, "Khulna": { x: 38, y: 88 }, "Bagerhat": { x: 48, y: 92 }, "Pirojpur": { x: 55, y: 92 }, "Jhalokati": { x: 60, y: 90 },
+  "Barisal": { x: 68, y: 88 }, "Bhola": { x: 78, y: 92 }, "Lakshmipur": { x: 85, y: 85 }, "Chandpur": { x: 80, y: 78 }, "Comilla": { x: 88, y: 68 },
+  "Feni": { x: 92, y: 78 }, "Noakhali": { x: 88, y: 88 }, "Patuakhali": { x: 72, y: 95 }, "Barguna": { x: 65, y: 98 }, "Chittagong": { x: 95, y: 88 },
+  "Khagrachhari": { x: 98, y: 65 }, "Rangamati": { x: 99, y: 75 }, "Bandarban": { x: 98, y: 95 }, "Cox's Bazar": { x: 95, y: 99 }
+};
 
-const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => void; onClose: () => void; userEmail?: string }> = ({ onConfirm, onClose, userEmail }) => {
+const DisplayNamePrompt: React.FC<{ user: any; onConfirm: (name: string, save: boolean) => void; onClose: () => void }> = ({ user, onConfirm, onClose }) => {
   const [name, setName] = useState('');
   const [save, setSave] = useState(false);
   const [error, setError] = useState('');
@@ -33,12 +47,12 @@ const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => 
       setError('Name must be at least 2 characters');
       return;
     }
-    if (containsBanned(trimmed)) {
-      setError('That name contains prohibited words.');
+    if (trimmed.toLowerCase() === 'admin' && user?.email !== 'edublitz71@gmail.com') {
+      setError('The username "admin" is reserved for the system administrator.');
       return;
     }
-    if (trimmed.toLowerCase() === 'admin' && userEmail !== 'edublitz71@gmail.com') {
-      setError('This username is reserved.');
+    if (containsBanned(trimmed)) {
+      setError('That name contains prohibited words.');
       return;
     }
     onConfirm(trimmed, save);
@@ -101,6 +115,73 @@ const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => 
   );
 };
 
+const BangladeshMap: React.FC<{ districtUsers: Record<string, number> }> = ({ districtUsers }) => {
+  const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
+
+  return (
+    <div className="w-full aspect-[4/5] max-h-[600px] rounded-[40px] overflow-hidden border border-neutral-800 bg-neutral-900/50 relative p-8 flex items-center justify-center">
+      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-2xl">
+        {/* More accurate Bangladesh Outline */}
+        <path
+          d="M30,5 L40,2 L55,5 L65,10 L75,15 L85,20 L95,25 L98,40 L95,60 L98,75 L95,85 L88,95 L80,98 L70,95 L60,98 L50,95 L40,98 L30,95 L20,98 L10,90 L5,80 L2,65 L5,50 L2,35 L10,20 L20,10 Z"
+          fill="rgba(16, 185, 129, 0.03)"
+          stroke="rgba(16, 185, 129, 0.2)"
+          strokeWidth="0.3"
+        />
+        
+        {/* District points */}
+        {Object.entries(DISTRICT_POSITIONS).map(([name, pos]) => {
+          const count = districtUsers[name] || 0;
+          const isActive = count > 0;
+          
+          return (
+            <g 
+              key={name} 
+              onMouseEnter={() => setHoveredDistrict(name)}
+              onMouseLeave={() => setHoveredDistrict(null)}
+              className="cursor-pointer"
+            >
+              {/* Pulse effect for active districts */}
+              {isActive && (
+                <circle cx={pos.x} cy={pos.y} r="1.5" fill="#10b981" className="animate-ping opacity-20" />
+              )}
+              
+              <circle
+                cx={pos.x}
+                cy={pos.y}
+                r={isActive ? "0.8" : "0.4"}
+                fill={isActive ? "#10b981" : "#404040"}
+                className="transition-all duration-300"
+              />
+
+              {hoveredDistrict === name && (
+                <foreignObject x={pos.x + 2} y={pos.y - 5} width="40" height="10">
+                  <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded px-2 py-1 text-[4px] font-black text-white whitespace-nowrap">
+                    {name}: {count}
+                  </div>
+                </foreignObject>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      
+      <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-400">Active Districts</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-neutral-700" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Inactive</span>
+          </div>
+        </div>
+        <span className="text-[10px] font-black uppercase tracking-tighter text-neutral-700">64 Districts Illustrated</span>
+      </div>
+    </div>
+  );
+};
 
 export const HomePage: React.FC<{
   onStart: (mode: 'video' | 'text', name: string) => void;
@@ -121,7 +202,7 @@ export const HomePage: React.FC<{
     totalVideoChats: 0,
     totalTextChats: 0,
     totalAccounts: 0,
-    districtUsers: {} as Record<string, number>,
+    districtUsers: {} as Record<string, number>
   });
 
   // Live counters from /api/stats
@@ -392,24 +473,89 @@ export const HomePage: React.FC<{
               </div>
             </div>
 
-            {/* Map Section */}
-            <div className="mt-20 w-full">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tighter">Live User Distribution</h2>
-                  <p className="text-neutral-500 text-sm font-medium">Real-time activity across districts</p>
+            {/* District Activity Section */}
+            <section className="mt-24 w-full">
+              <div className="flex flex-col md:flex-row items-end justify-between gap-8 mb-12">
+                <div className="max-w-2xl">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live District Pulse</span>
+                  </div>
+                  <h2 className="text-5xl md:text-6xl font-black text-white uppercase tracking-tighter leading-[0.9]">
+                    Who's Active <br />
+                    <span className="text-emerald-500">In Your Area?</span>
+                  </h2>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Map</span>
+                <p className="text-neutral-500 text-sm font-medium max-w-xs md:text-right">
+                  Real-time activity tracking across all 64 districts. See where the conversation is happening right now.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Map Visualization */}
+                <div className="lg:col-span-7 bg-neutral-900/30 border border-white/5 rounded-[40px] p-8 backdrop-blur-sm relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                  <div className="relative z-10">
+                    <BangladeshMap districtUsers={stats.districtUsers} />
+                  </div>
+                </div>
+
+                {/* District Stats List */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-neutral-900/50 border border-white/5 rounded-[32px] p-6">
+                    <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+                      <MapPin className="w-3 h-3 text-emerald-500" />
+                      Top Active Districts
+                    </h3>
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                      {Object.entries((stats as any).districtStats || {})
+                        .sort(([, a]: any, [, b]: any) => (b.total) - (a.total))
+                        .slice(0, 15)
+                        .map(([district, data]: any) => (
+                          <div key={district} className="group flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.05] hover:border-emerald-500/30 transition-all">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-xl bg-neutral-800 flex items-center justify-center text-[10px] font-black text-neutral-400 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
+                                {district.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-black text-white uppercase tracking-tight">{district}</h4>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[8px] text-emerald-500/70 font-black uppercase tracking-widest">{data.joined} Joined</span>
+                                  <span className="text-[8px] text-amber-500/70 font-black uppercase tracking-widest">{data.waiting} Waiting</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xl font-black text-emerald-500 tabular-nums">{data.total}</span>
+                              <p className="text-[8px] text-neutral-600 font-black uppercase tracking-widest">Total</p>
+                            </div>
+                          </div>
+                        ))}
+                      {Object.keys(stats.districtUsers).length === 0 && (
+                        <div className="text-center py-12">
+                          <Ghost className="w-12 h-12 text-neutral-800 mx-auto mb-4" />
+                          <p className="text-neutral-600 text-[10px] font-black uppercase tracking-widest">No live activity detected yet</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Stats Card */}
+                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-[32px] p-8 text-black relative overflow-hidden">
+                    <div className="relative z-10">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] mb-1 opacity-70">Total Coverage</h3>
+                      <p className="text-4xl font-black tracking-tighter mb-4">
+                        {Object.keys(stats.districtUsers).length} <span className="text-sm uppercase tracking-widest opacity-70">Districts</span>
+                      </p>
+                      <p className="text-xs font-bold leading-relaxed opacity-80">
+                        Connecting people from every corner of the country. Join the pulse and find someone new from your area.
+                      </p>
+                    </div>
+                    <Zap className="absolute -bottom-6 -right-6 w-32 h-32 opacity-10" />
+                  </div>
                 </div>
               </div>
-              <BangladeshMap
-                districtUsers={stats.districtUsers}
-                districtRoomUsers={stats.districtRoomUsers}
-                districtWaiting={stats.districtWaiting}
-              />
-            </div>
+            </section>
           </motion.div>
         </div>
       </main>
@@ -477,7 +623,7 @@ export const HomePage: React.FC<{
         )}
         {showNamePrompt && (
           <DisplayNamePrompt
-            userEmail={user?.email ?? undefined}
+            user={user}
             onConfirm={handleNameConfirm}
             onClose={() => {
               setShowNamePrompt(false);

@@ -67,13 +67,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const partnerUidRef = useRef<string | null>(null);
   const partnerEmailRef = useRef<string | null>(null);
 
+  const [district, setDistrict] = useState<string>('');
+
   useEffect(() => {
     const newSocket = io();
     setSocket(newSocket);
 
     const onConnect = () => {
-      getDistrict().then(district => {
-        newSocket.emit('set-district', { district });
+      getDistrict().then(d => {
+        setDistrict(d);
+        newSocket.emit('set-district', { district: d });
       }).catch(() => {});
     };
 
@@ -404,7 +407,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         uid: user?.uid,
         email: user?.email,
         isAdmin,
-        mode
+        mode,
+        district
       });
     } else {
       peerRef.current?.once('open', (id) => socket.emit('join-queue', {
@@ -412,7 +416,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         uid: user?.uid,
         email: user?.email,
         isAdmin,
-        mode
+        mode,
+        district
       }));
     }
   };

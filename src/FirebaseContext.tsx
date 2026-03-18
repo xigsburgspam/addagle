@@ -84,12 +84,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
 
           setUserData(currentData);
-          // Enforce: only edublitz71@gmail.com can have admin role
-          if (currentData.role === 'admin' && firebaseUser.email !== 'edublitz71@gmail.com') {
-            currentData = { ...currentData, role: 'user' };
-            await updateDoc(userDocRef, { role: 'user' }).catch(() => {});
-          }
-          setUserData(currentData);
           setLoading(false);
         }, (error) => {
           handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);

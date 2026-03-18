@@ -60,7 +60,6 @@ export const AdminPanel: React.FC = () => {
 
     const q = query(collection(db, 'reports'));
     const unsubscribeReports = onSnapshot(q, (snapshot) => {
-      console.log('Reports snapshot received, count:', snapshot.size);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
       data.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
       setReports(data);
