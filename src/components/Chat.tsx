@@ -1,6 +1,7 @@
 import React, {
   useState, useEffect, useRef, useCallback, useLayoutEffect
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Send, Reply, X, Check, CheckCheck, Clock, Smile } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -37,16 +38,17 @@ interface ChatProps {
 export const Chat: React.FC<ChatProps> = ({
   socket, roomId, currentUserId, onNewMessage
 }) => {
-  const [messages,      setMessages]      = useState<Message[]>([]);
-  const [inputText,     setInputText]     = useState('');
-  const [partnerTyping, setPartnerTyping] = useState(false);
-  const [replyingTo,    setReplyingTo]    = useState<Message | null>(null);
-  const [menuId,        setMenuId]        = useState<string | null>(null);
-  const [menuFlip,      setMenuFlip]      = useState(false);
-  const [flashId,       setFlashId]       = useState<string | null>(null);
-  const [ripple,        setRipple]        = useState<{ id: string; x: number; y: number } | null>(null);
-  const [swipes,        setSwipes]        = useState<Record<string, Swipe>>({});
-  const [newReactionId, setNewReactionId] = useState<string | null>(null);
+  const [messages,        setMessages]        = useState<Message[]>([]);
+  const [inputText,       setInputText]        = useState('');
+  const [partnerTyping,   setPartnerTyping]    = useState(false);
+  const [replyingTo,      setReplyingTo]       = useState<Message | null>(null);
+  const [menuId,          setMenuId]           = useState<string | null>(null);
+  const [menuFlip,        setMenuFlip]         = useState(false);
+  const [menuPos,         setMenuPos]          = useState<{ x: number; y: number; width: number } | null>(null);
+  const [flashId,         setFlashId]          = useState<string | null>(null);
+  const [ripple,          setRipple]           = useState<{ id: string; x: number; y: number } | null>(null);
+  const [swipes,          setSwipes]           = useState<Record<string, Swipe>>({});
+  const [newReactionId,   setNewReactionId]    = useState<string | null>(null);
 
   const scrollRef   = useRef<HTMLDivElement>(null);
   const inputRef    = useRef<HTMLTextAreaElement>(null);
@@ -145,7 +147,14 @@ export const Chat: React.FC<ChatProps> = ({
     const el = bubbleRefs.current[id];
     if (el) {
       const r = el.getBoundingClientRect();
-      setMenuFlip(window.innerHeight - r.bottom < 190);
+      const spaceBelow = window.innerHeight - r.bottom;
+      const flip = spaceBelow < 190;
+      setMenuFlip(flip);
+      setMenuPos({
+        x: r.left,
+        y: flip ? r.top + window.scrollY : r.bottom + window.scrollY,
+        width: r.width,
+      });
     }
     setMenuId(p => p === id ? null : id);
   };
@@ -385,56 +394,6 @@ export const Chat: React.FC<ChatProps> = ({
                     </AnimatePresence>
                   </motion.div>
                 </div>
-
-                <AnimatePresence>
-                  {isActive && (
-                    <motion.div
-                      key="menu"
-                      initial={{ opacity: 0, scale: 0.85, y: menuFlip ? 8 : -8 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.85 }}
-                      transition={{ duration: 0.16, ease: [0.34, 1.4, 0.64, 1] }}
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={e => e.stopPropagation()}
-                      className={`absolute z-50 min-w-[190px]
-                                  rounded-2xl overflow-hidden
-                                  shadow-2xl shadow-black/70
-                                  border border-white/[0.08]
-                                  ${mine ? 'right-0' : 'left-0'}
-                                  ${menuFlip ? 'bottom-full mb-2' : 'top-full mt-2'}`}
-                      style={{ background: '#1e2128' }}
-                    >
-                      {!mine && (
-                        <div className="flex items-center gap-0.5 px-2 py-2.5
-                                        border-b border-white/[0.07]">
-                          {REACTIONS.map(e => (
-                            <button key={e} onClick={() => react(msg.id, e)}
-                              className="w-9 h-9 flex items-center justify-center rounded-xl
-                                         text-[1.25rem] hover:bg-white/10 active:scale-90
-                                         transition-all duration-100 cursor-pointer">
-                              {e}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => {
-                          setReplyingTo(msg); setMenuId(null);
-                          setTimeout(() => inputRef.current?.focus(), 60);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-3
-                                   hover:bg-white/[0.07] active:bg-white/10
-                                   transition-colors cursor-pointer"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-emerald-500/15
-                                        flex items-center justify-center shrink-0">
-                          <Reply className="w-3.5 h-3.5 text-emerald-400" />
-                        </div>
-                        <span className="text-[13px] font-medium text-neutral-200">Reply</span>
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             </div>
           );
@@ -467,6 +426,64 @@ export const Chat: React.FC<ChatProps> = ({
 
         <div className="h-2" />
       </div>
+
+      {/* Portal context menu — rendered into document.body, always on top */}
+      {menuId && menuPos && (() => {
+        const activeMsg = messages.find(m => m.id === menuId);
+        if (!activeMsg) return null;
+        const isMinePortal = activeMsg.sender === currentUserId;
+        const menuWidth = 190;
+        const rawX = isMinePortal
+          ? menuPos.x + menuPos.width - menuWidth
+          : menuPos.x;
+        const clampedX = Math.max(8, Math.min(rawX, window.innerWidth - menuWidth - 8));
+        const posStyle: React.CSSProperties = menuFlip
+          ? { position: 'fixed', left: clampedX, bottom: window.innerHeight - menuPos.y + 4, zIndex: 9999 }
+          : { position: 'fixed', left: clampedX, top: menuPos.y + 4, zIndex: 9999 };
+        return createPortal(
+          <AnimatePresence>
+            <motion.div
+              key="portal-menu"
+              initial={{ opacity: 0, scale: 0.85, y: menuFlip ? 6 : -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              transition={{ duration: 0.16, ease: [0.34, 1.4, 0.64, 1] }}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+              style={{ ...posStyle, minWidth: menuWidth, background: '#1e2128' }}
+              className="rounded-2xl overflow-hidden shadow-2xl shadow-black/80 border border-white/[0.08]"
+            >
+              {!isMinePortal && (
+                <div className="flex items-center gap-0.5 px-2 py-2.5 border-b border-white/[0.07]">
+                  {REACTIONS.map(e => (
+                    <button key={e} onClick={() => react(activeMsg.id, e)}
+                      className="w-9 h-9 flex items-center justify-center rounded-xl
+                                 text-[1.25rem] hover:bg-white/10 active:scale-90
+                                 transition-all duration-100 cursor-pointer">
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setReplyingTo(activeMsg); setMenuId(null);
+                  setTimeout(() => inputRef.current?.focus(), 60);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3
+                           hover:bg-white/[0.07] active:bg-white/10
+                           transition-colors cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+                  <Reply className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <span className="text-[13px] font-medium text-neutral-200">Reply</span>
+              </button>
+            </motion.div>
+          </AnimatePresence>,
+          document.body
+        );
+      })()}
 
       <div className="shrink-0" style={{ background: '#161719', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
 
