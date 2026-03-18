@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Send, Maximize2, Minimize2, ArrowLeft, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Hls from 'hls.js';
 
 const BANNED_WORDS = [
   'sex','fuck','suck','kiss','bongo','boltu','hasina','chudina','chudi',
@@ -51,7 +52,41 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const inputRef     = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef    = useRef<HTMLIFrameElement>(null);
+  const videoRef     = useRef<HTMLVideoElement>(null);
   const typingTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isM3u8 = match.streamUrl.toLowerCase().includes('.m3u8');
+
+  useEffect(() => {
+    if (!isM3u8 || streamInPopup || !videoRef.current) return;
+
+    let hls: Hls | null = null;
+    const video = videoRef.current;
+
+    if (Hls.isSupported()) {
+      hls = new Hls({
+        maxBufferLength: 30,
+        maxMaxBufferLength: 600,
+      });
+      hls.loadSource(match.streamUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(e => console.log('Auto-play prevented', e));
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native Safari support
+      video.src = match.streamUrl;
+      video.addEventListener('loadedmetadata', () => {
+        video.play().catch(e => console.log('Auto-play prevented', e));
+      });
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [match.streamUrl, isM3u8, streamInPopup]);
 
   const clearTypingFor = (name: string) => {
     if (typingTimers.current[name]) clearTimeout(typingTimers.current[name]);
@@ -200,40 +235,52 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
       {/* Stream — top 45% */}
       {!streamInPopup ? (
         <div className="shrink-0 w-full bg-black relative group" style={{ height: '45%' }}>
-          <iframe
-            ref={iframeRef}
-            src={useProxy ? `/api/proxy-stream?url=${encodeURIComponent(match.streamUrl)}` : match.streamUrl}
-            className="w-full h-full border-0"
-            allowFullScreen
-            allow="autoplay; fullscreen; encrypted-media"
-            title="Match Stream"
-          />
+          {isM3u8 ? (
+            <video
+              ref={videoRef}
+              className="w-full h-full object-contain bg-black"
+              controls
+              playsInline
+              autoPlay
+            />
+          ) : (
+            <iframe
+              ref={iframeRef}
+              src={useProxy ? `/api/proxy-stream?url=${encodeURIComponent(match.streamUrl)}` : match.streamUrl}
+              className="w-full h-full border-0"
+              allowFullScreen
+              allow="autoplay; fullscreen; encrypted-media"
+              title="Match Stream"
+            />
+          )}
           
           {/* Overlay for anti-iframe fallback */}
-          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="bg-neutral-900/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center max-w-xs pointer-events-auto shadow-2xl">
-              <p className="text-xs text-neutral-300 mb-3 leading-relaxed">
-                If the video is blank or refusing to connect (anti-iframe protection), you can try the proxy player or open it in a separate popup window.
-              </p>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => setUseProxy(!useProxy)}
-                  className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
-                >
-                  {useProxy ? 'Use Standard Player' : 'Try Proxy Player (Bypass)'}
-                </button>
-                <button
-                  onClick={() => {
-                    window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
-                    setStreamInPopup(true);
-                  }}
-                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
-                >
-                  Open Stream in Popup
-                </button>
+          {!isM3u8 && (
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <div className="bg-neutral-900/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center max-w-xs pointer-events-auto shadow-2xl">
+                <p className="text-xs text-neutral-300 mb-3 leading-relaxed">
+                  If the video is blank or refusing to connect (anti-iframe protection), you can try the proxy player or open it in a separate popup window.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => setUseProxy(!useProxy)}
+                    className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
+                  >
+                    {useProxy ? 'Use Standard Player' : 'Try Proxy Player (Bypass)'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
+                      setStreamInPopup(true);
+                    }}
+                    className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
+                  >
+                    Open Stream in Popup
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       ) : (
         <div className="shrink-0 w-full bg-neutral-900 flex flex-col items-center justify-center p-4 border-b border-white/[0.07]">
