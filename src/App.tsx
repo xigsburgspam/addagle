@@ -10,12 +10,17 @@ import { CookieConsent } from './components/CookieConsent';
 import { TermsPrivacy } from './components/TermsPrivacy';
 import { ShieldAlert } from 'lucide-react';
 import { auth } from './firebase';
+import { FootballLobby } from './components/FootballLobby';
+import { FootballRoom } from './components/FootballRoom';
 
 const AppContent: React.FC = () => {
   const { user, userData, loading } = useFirebase();
   const { t } = useLanguage();
   const [isChatting, setIsChatting] = useState(false);
   const [chatMode, setChatMode] = useState<'video' | 'text'>('video');
+  const [showFootballLobby, setShowFootballLobby] = useState(false);
+  const [footballMatch,     setFootballMatch]     = useState<any>(null);
+  const [footballName,      setFootballName]      = useState('');
 
   const startChat = (mode: 'video' | 'text') => {
     setChatMode(mode);
@@ -37,9 +42,9 @@ const AppContent: React.FC = () => {
           <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <ShieldAlert className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tighter  mb-4">{t.accessRevoked}</h1>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">{t.accessRevoked}</h1>
           <p className="text-neutral-400 font-medium mb-8">Your account has been permanently suspended for violating our community guidelines. This action is final.</p>
-          <button 
+          <button
             onClick={() => auth.signOut()}
             className="w-full py-4 bg-neutral-800 hover:bg-neutral-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all"
           >
@@ -54,18 +59,37 @@ const AppContent: React.FC = () => {
     <ErrorBoundary>
       <Router>
         <Routes>
-          <Route 
-            path="/" 
+          <Route
+            path="/"
             element={
               <>
                 {isChatting && user && !userData?.isBlocked ? (
                   <VideoChat mode={chatMode} onExit={() => setIsChatting(false)} />
                 ) : (
-                  <HomePage onStart={startChat} />
+                  <HomePage onStart={startChat} onWatchFootball={() => setShowFootballLobby(true)} />
+                )}
+                {showFootballLobby && (
+                  <FootballLobby
+                    onClose={() => setShowFootballLobby(false)}
+                    onEnter={(match, name) => {
+                      setFootballMatch(match);
+                      setFootballName(name);
+                      setShowFootballLobby(false);
+                    }}
+                  />
+                )}
+                {footballMatch && (
+                  <div className="fixed inset-0 z-[150]">
+                    <FootballRoom
+                      match={footballMatch}
+                      userName={footballName}
+                      onLeave={() => setFootballMatch(null)}
+                    />
+                  </div>
                 )}
                 <CookieConsent />
               </>
-            } 
+            }
           />
           <Route path="/terms" element={<TermsPrivacy type="terms" />} />
           <Route path="/privacy" element={<TermsPrivacy type="privacy" />} />

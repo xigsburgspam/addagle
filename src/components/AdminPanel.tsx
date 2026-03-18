@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, onSnapshot, query, orderBy, doc, updateDoc, setDoc, deleteDoc, Timestamp } from '../firebase';
-import { Shield, UserX, MessageSquare, ExternalLink, Activity, Terminal, ShieldAlert, Users, Globe, Lock, Video } from 'lucide-react';
+import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp } from '../firebase';
+import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
@@ -30,51 +30,62 @@ interface BlockedEmail {
   uid?: string;
 }
 
+interface FootballMatch {
+  id: string;
+  teamA: string;
+  teamB: string;
+  league: string;
+  streamUrl: string;
+  live: boolean;
+}
+
 export const AdminPanel: React.FC = () => {
   const { isAdmin } = useFirebase();
   const { t } = useLanguage();
-  const [reports, setReports] = useState<Report[]>([]);
-  const [blockedEmails, setBlockedEmails] = useState<BlockedEmail[]>([]);
-  const [activeRooms, setActiveRooms] = useState<ActiveRoom[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'reports' | 'blocked'>('reports');
+  const [reports,      setReports]      = useState<Report[]>([]);
+  const [blockedEmails,setBlockedEmails]= useState<BlockedEmail[]>([]);
+  const [activeRooms,  setActiveRooms]  = useState<ActiveRoom[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches'>('reports');
+  const [matches,      setMatches]      = useState<FootballMatch[]>([]);
+  const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '' });
+  const [addingMatch,  setAddingMatch]  = useState(false);
+  const [matchMsg,     setMatchMsg]     = useState('');
 
   useEffect(() => {
     if (!isAdmin) return;
 
     const q = query(collection(db, 'reports'));
     const unsubscribeReports = onSnapshot(q, (snapshot) => {
-      const reportsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
-      // Sort in memory instead of query to avoid issues with missing fields
-      reportsData.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
-      setReports(reportsData);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
+      data.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+      setReports(data);
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reports');
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'reports'));
 
     const qBlocked = query(collection(db, 'blocked_emails'));
     const unsubscribeBlocked = onSnapshot(qBlocked, (snapshot) => {
-      const blockedData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlockedEmail));
-      // Sort in memory
-      blockedData.sort((a, b) => (b.blockedAt?.toMillis?.() || 0) - (a.blockedAt?.toMillis?.() || 0));
-      setBlockedEmails(blockedData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'blocked_emails');
-    });
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlockedEmail));
+      data.sort((a, b) => (b.blockedAt?.toMillis?.() || 0) - (a.blockedAt?.toMillis?.() || 0));
+      setBlockedEmails(data);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'blocked_emails'));
 
     const fetchRooms = async () => {
       try {
         const res = await fetch('/api/active-rooms');
-        const data = await res.json();
-        setActiveRooms(data);
-      } catch (e) {
-        console.error('Error fetching active rooms:', e);
-      }
+        setActiveRooms(await res.json());
+      } catch {}
     };
-
     fetchRooms();
     const roomInterval = setInterval(fetchRooms, 5000);
+
+    const fetchMatches = async () => {
+      try {
+        const res = await fetch('/api/football/matches');
+        setMatches(await res.json());
+      } catch {}
+    };
+    fetchMatches();
 
     return () => {
       unsubscribeReports();
@@ -83,59 +94,71 @@ export const AdminPanel: React.FC = () => {
     };
   }, [isAdmin]);
 
-  const deleteReport = async (reportId: string) => {
-    if (!confirm('Are you sure you want to delete this report?')) return;
+  const deleteReport = async (id: string) => {
+    if (!confirm('Delete this report?')) return;
     try {
-      await deleteDoc(doc(db, 'reports', reportId));
-      alert('Report dismissed successfully.');
+      await deleteDoc(doc(db, 'reports', id));
     } catch (e) {
-      console.error('Delete report error:', e);
-      alert('Failed to delete report. Check console for details.');
-      handleFirestoreError(e, OperationType.DELETE, `reports/${reportId}`);
+      handleFirestoreError(e, OperationType.DELETE, `reports/${id}`);
     }
   };
 
   const unblockEmail = async (email: string, userId?: string) => {
-    if (!confirm(`Are you sure you want to unblock ${email}?`)) return;
+    if (!confirm(`Unblock ${email}?`)) return;
     try {
       await deleteDoc(doc(db, 'blocked_emails', email));
-      if (userId) {
-        await updateDoc(doc(db, 'users', userId), { isBlocked: false });
-      }
-      alert('Email unblocked successfully.');
+      if (userId) await updateDoc(doc(db, 'users', userId), { isBlocked: false });
     } catch (e) {
-      console.error('Unblock error:', e);
-      alert('Failed to unblock. Check console for details.');
       handleFirestoreError(e, OperationType.DELETE, `blocked_emails/${email}`);
     }
   };
 
   const blockUser = async (userId: string, email?: string) => {
-    if (!confirm('Are you sure you want to block this user forever?')) return;
+    if (!confirm('Block this user permanently?')) return;
     try {
       await updateDoc(doc(db, 'users', userId), { isBlocked: true });
-      
-      // Always create a blocked email entry if email is available
-      // If not available, we still blocked the UID, but it won't show in the "Blocked Emails" list
-      // which is primarily for email-based blocking.
       if (email) {
-        await setDoc(doc(db, 'blocked_emails', email), {
-          blockedAt: Timestamp.now(),
-          reason: 'Admin Blocked',
-          uid: userId
-        });
+        await setDoc(doc(db, 'blocked_emails', email), { blockedAt: Timestamp.now(), reason: 'Admin Blocked', uid: userId });
       } else {
-        // Create a placeholder entry for UID-only blocks so they show up in the list
-        await setDoc(doc(db, 'blocked_emails', `uid:${userId}`), {
-          blockedAt: Timestamp.now(),
-          reason: 'Admin Blocked (UID)',
-          uid: userId
-        });
+        await setDoc(doc(db, 'blocked_emails', `uid:${userId}`), { blockedAt: Timestamp.now(), reason: 'Admin Blocked (UID)', uid: userId });
       }
-      alert('User blocked successfully.');
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
     }
+  };
+
+  const addMatch = async () => {
+    const { teamA, teamB, league, streamUrl } = newMatch;
+    if (!teamA || !teamB || !league || !streamUrl) { setMatchMsg('All fields required.'); return; }
+    setAddingMatch(true);
+    try {
+      const res = await fetch('/api/football/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamA, teamB, league, streamUrl }),
+      });
+      const data = await res.json();
+      setMatches(p => [...p, { id: data.id, ...newMatch, live: true }]);
+      setNewMatch({ teamA: '', teamB: '', league: '', streamUrl: '' });
+      setMatchMsg('Match added!');
+      setTimeout(() => setMatchMsg(''), 3000);
+    } catch { setMatchMsg('Failed to add match.'); }
+    setAddingMatch(false);
+  };
+
+  const deleteMatch = async (id: string) => {
+    if (!confirm('Delete this match?')) return;
+    await fetch(`/api/football/matches/${id}`, { method: 'DELETE' });
+    setMatches(p => p.filter(m => m.id !== id));
+  };
+
+  const toggleLive = async (id: string, live: boolean) => {
+    await fetch(`/api/football/matches/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ live: !live }),
+    });
+    setMatches(p => p.map(m => m.id === id ? { ...m, live: !live } : m));
   };
 
   if (!isAdmin) {
@@ -145,13 +168,13 @@ export const AdminPanel: React.FC = () => {
           <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
             <ShieldAlert className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-3xl font-black tracking-tighter uppercase  mb-4">Access Denied</h1>
+          <h1 className="text-3xl font-black tracking-tighter uppercase mb-4">Access Denied</h1>
           <p className="text-neutral-500 font-medium leading-relaxed mb-8">
-            This terminal is restricted to Gupto Protocol Administrators. Unauthorized access is logged.
+            This terminal is restricted to Gupto Protocol Administrators.
           </p>
-          <button 
+          <button
             onClick={() => window.location.href = '/'}
-            className="w-full bg-white text-black font-black py-4 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all duration-300 uppercase tracking-widest "
+            className="w-full bg-white text-black font-black py-4 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all duration-300 uppercase tracking-widest"
           >
             Return to Base
           </button>
@@ -162,7 +185,6 @@ export const AdminPanel: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white selection:bg-emerald-500/30 font-sans overflow-hidden flex flex-col">
-      {/* Technical Sidebar / Header */}
       <header className="flex items-center justify-between px-10 py-6 border-b border-neutral-900 bg-neutral-950 z-30">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-3">
@@ -174,9 +196,7 @@ export const AdminPanel: React.FC = () => {
               <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-600 mt-1">Gupto Protocol v2.5</p>
             </div>
           </div>
-          
           <div className="h-8 w-px bg-neutral-900 mx-2" />
-          
           <div className="flex items-center gap-6">
             <div className="flex flex-col">
               <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Active Nodes</span>
@@ -188,7 +208,6 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
         </div>
-
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900 rounded-xl border border-neutral-800">
             <Globe className="w-3 h-3 text-emerald-500" />
@@ -204,56 +223,51 @@ export const AdminPanel: React.FC = () => {
       </header>
 
       <main className="flex-1 flex overflow-hidden">
-        {/* Navigation Sidebar */}
         <aside className="w-80 border-r border-neutral-900 bg-neutral-950 p-8 flex flex-col gap-4">
-          <button 
-            onClick={() => setActiveTab('reports')}
-            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${
-              activeTab === 'reports' 
-                ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' 
-                : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'
-            }`}
-          >
+          {/* Reports tab */}
+          <button onClick={() => setActiveTab('reports')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'reports' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
             <div className="flex items-center gap-4">
               <MessageSquare className="w-5 h-5" />
-              <span className="font-black uppercase tracking-tighter ">Reports</span>
+              <span className="font-black uppercase tracking-tighter">Reports</span>
             </div>
             {reports.length > 0 && (
-              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
-                activeTab === 'reports' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'
-              }`}>
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'reports' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
                 {reports.length}
               </span>
             )}
           </button>
 
-          <button 
-            onClick={() => setActiveTab('blocked')}
-            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${
-              activeTab === 'blocked' 
-                ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' 
-                : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'
-            }`}
-          >
+          {/* Blocked tab */}
+          <button onClick={() => setActiveTab('blocked')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'blocked' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
             <div className="flex items-center gap-4">
               <UserX className="w-5 h-5" />
-              <span className="font-black uppercase tracking-tighter ">Blocked</span>
+              <span className="font-black uppercase tracking-tighter">Blocked</span>
             </div>
             {blockedEmails.length > 0 && (
-              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${
-                activeTab === 'blocked' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'
-              }`}>
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'blocked' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
                 {blockedEmails.length}
               </span>
             )}
           </button>
 
-          <button 
-            onClick={() => {
-              window.location.href = '/';
-            }}
-            className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter  shadow-xl"
-          >
+          {/* Matches tab */}
+          <button onClick={() => setActiveTab('matches')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'matches' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
+            <div className="flex items-center gap-4">
+              <Tv2 className="w-5 h-5" />
+              <span className="font-black uppercase tracking-tighter">Matches</span>
+            </div>
+            {matches.length > 0 && (
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'matches' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
+                {matches.length}
+              </span>
+            )}
+          </button>
+
+          <button onClick={() => { window.location.href = '/'; }}
+            className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter shadow-xl">
             <Video className="w-6 h-6" />
             Start Encounter
           </button>
@@ -261,7 +275,7 @@ export const AdminPanel: React.FC = () => {
           <div className="mt-auto p-6 bg-neutral-900/50 rounded-3xl border border-neutral-900">
             <div className="flex items-center gap-3 mb-4">
               <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 ">System Log</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">System Log</span>
             </div>
             <div className="space-y-2">
               <p className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">07:56:27 - Protocol Initialized</p>
@@ -271,28 +285,19 @@ export const AdminPanel: React.FC = () => {
           </div>
         </aside>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-12 bg-neutral-950 relative">
-          {/* Background Grid */}
-          <div className="absolute inset-0 opacity-[0.02] pointer-events-none" 
+          <div className="absolute inset-0 opacity-[0.02] pointer-events-none"
                style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
           <AnimatePresence mode="wait">
             {activeTab === 'reports' ? (
-              <motion.div 
-                key="reports"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-5xl mx-auto space-y-6"
-              >
+              <motion.div key="reports" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
                 <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase ">Security Reports</h2>
+                  <h2 className="text-4xl font-black tracking-tighter uppercase">Security Reports</h2>
                   <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Real-time Feed</span>
                 </div>
-
-                {reports.map((report) => (
-                  <div key={report.id} className="group bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-red-500/30 transition-all duration-500 backdrop-blur-xl">
+                {reports.map(report => (
+                  <div key={report.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-red-500/30 transition-all duration-500">
                     <div className="flex items-start justify-between mb-8">
                       <div className="flex items-center gap-6">
                         <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center">
@@ -304,41 +309,31 @@ export const AdminPanel: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex gap-3">
-                        <button
-                          onClick={() => deleteReport(report.id)}
-                          className="flex items-center gap-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest  transition-all"
-                        >
+                        <button onClick={() => deleteReport(report.id)}
+                          className="bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all">
                           Dismiss
                         </button>
-                        <button
-                          onClick={() => blockUser(report.reportedId, report.reportedEmail)}
-                          className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest  transition-all shadow-xl shadow-red-600/20"
-                        >
-                          <UserX className="w-4 h-4" />
-                          Execute Block
+                        <button onClick={() => blockUser(report.reportedId, report.reportedEmail)}
+                          className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-red-600/20">
+                          <UserX className="w-4 h-4" /> Execute Block
                         </button>
                       </div>
                     </div>
-
                     <div className="bg-neutral-950 p-6 rounded-2xl border border-neutral-900 mb-6">
-                      <p className="text-neutral-400 text-sm font-medium leading-relaxed ">"{report.reason}"</p>
+                      <p className="text-neutral-400 text-sm font-medium">"{report.reason}"</p>
                     </div>
-
-                    <div className="flex items-center justify-between pt-6 border-t border-neutral-900">
-                      <div className="flex gap-8">
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
-                          <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
-                        </div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>
-                          <p className="text-[10px] font-mono text-neutral-400">{new Date(report.timestamp?.toDate()).toLocaleString()}</p>
-                        </div>
+                    <div className="flex gap-8 pt-6 border-t border-neutral-900">
+                      <div>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Reporter</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{report.reporterEmail || report.reporterId}</p>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Timestamp</p>
+                        <p className="text-[10px] font-mono text-neutral-400">{new Date(report.timestamp?.toDate()).toLocaleString()}</p>
                       </div>
                     </div>
                   </div>
                 ))}
-
                 {reports.length === 0 && (
                   <div className="py-40 text-center">
                     <Shield className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
@@ -346,21 +341,15 @@ export const AdminPanel: React.FC = () => {
                   </div>
                 )}
               </motion.div>
-            ) : (
-              <motion.div 
-                key="blocked"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-5xl mx-auto space-y-6"
-              >
+
+            ) : activeTab === 'blocked' ? (
+              <motion.div key="blocked" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
                 <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase ">Blocked Entities</h2>
+                  <h2 className="text-4xl font-black tracking-tighter uppercase">Blocked Entities</h2>
                   <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Protocol Deny List</span>
                 </div>
-
-                {blockedEmails.map((blocked) => (
-                  <div key={blocked.id} className="group bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/30 transition-all duration-500 backdrop-blur-xl">
+                {blockedEmails.map(blocked => (
+                  <div key={blocked.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/30 transition-all duration-500">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-6">
                         <div className="w-14 h-14 bg-neutral-950 rounded-2xl flex items-center justify-center border border-neutral-800">
@@ -371,14 +360,11 @@ export const AdminPanel: React.FC = () => {
                           <p className="text-xl font-mono text-white">{blocked.id}</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => unblockEmail(blocked.id, blocked.uid)}
-                        className="flex items-center gap-3 bg-white hover:bg-emerald-500 text-black hover:text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest  transition-all shadow-xl"
-                      >
+                      <button onClick={() => unblockEmail(blocked.id, blocked.uid)}
+                        className="bg-white hover:bg-emerald-500 text-black hover:text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl">
                         Restore Access
                       </button>
                     </div>
-                    
                     <div className="mt-6 flex gap-8 pt-6 border-t border-neutral-900">
                       <div>
                         <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Blocked At</p>
@@ -397,11 +383,96 @@ export const AdminPanel: React.FC = () => {
                     </div>
                   </div>
                 ))}
-
                 {blockedEmails.length === 0 && (
                   <div className="py-40 text-center">
                     <Globe className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
                     <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">Deny List is Empty</p>
+                  </div>
+                )}
+              </motion.div>
+
+            ) : (
+              <motion.div key="matches" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-4xl font-black tracking-tighter uppercase">Live Matches</h2>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-neutral-600">Football Stream Manager</span>
+                </div>
+
+                {/* Add match form */}
+                <div className="bg-neutral-900/50 border border-neutral-800 rounded-[32px] p-8">
+                  <h3 className="text-lg font-black uppercase tracking-tighter mb-6 flex items-center gap-3">
+                    <Plus className="w-5 h-5 text-emerald-500" /> Add New Match
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">Team A</label>
+                      <input value={newMatch.teamA} onChange={e => setNewMatch(p => ({ ...p, teamA: e.target.value }))}
+                        placeholder="e.g. Barcelona"
+                        className="w-full px-4 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">Team B</label>
+                      <input value={newMatch.teamB} onChange={e => setNewMatch(p => ({ ...p, teamB: e.target.value }))}
+                        placeholder="e.g. Real Madrid"
+                        className="w-full px-4 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">League</label>
+                      <input value={newMatch.league} onChange={e => setNewMatch(p => ({ ...p, league: e.target.value }))}
+                        placeholder="e.g. La Liga"
+                        className="w-full px-4 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">Stream URL</label>
+                      <input value={newMatch.streamUrl} onChange={e => setNewMatch(p => ({ ...p, streamUrl: e.target.value }))}
+                        placeholder="https://..."
+                        className="w-full px-4 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
+                    </div>
+                  </div>
+                  {matchMsg && (
+                    <p className={`text-xs mb-4 font-bold ${matchMsg.includes('!') ? 'text-emerald-400' : 'text-red-400'}`}>{matchMsg}</p>
+                  )}
+                  <button onClick={addMatch} disabled={addingMatch}
+                    className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-emerald-500/20">
+                    <Plus className="w-4 h-4" />
+                    {addingMatch ? 'Adding…' : 'Add Match'}
+                  </button>
+                </div>
+
+                {/* Match list */}
+                {matches.map(match => (
+                  <div key={match.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/20 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${match.live ? 'bg-red-500 animate-pulse' : 'bg-neutral-600'}`} />
+                          <span className={`text-[9px] font-bold uppercase tracking-widest ${match.live ? 'text-red-400' : 'text-neutral-600'}`}>
+                            {match.live ? 'LIVE' : 'OFFLINE'}
+                          </span>
+                          <span className="text-[9px] text-neutral-600 uppercase tracking-widest">· {match.league}</span>
+                        </div>
+                        <p className="text-xl font-black text-white">{match.teamA} vs {match.teamB}</p>
+                        <p className="text-[10px] font-mono text-neutral-600 mt-1 truncate max-w-sm">{match.streamUrl}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => toggleLive(match.id, match.live)}
+                          className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${match.live ? 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'}`}>
+                          {match.live ? <WifiOff className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
+                          {match.live ? 'Set Offline' : 'Set Live'}
+                        </button>
+                        <button onClick={() => deleteMatch(match.id)}
+                          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-red-600/20">
+                          <Trash2 className="w-4 h-4" /> Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {matches.length === 0 && (
+                  <div className="py-40 text-center">
+                    <Tv2 className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
+                    <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Matches Added Yet</p>
                   </div>
                 )}
               </motion.div>

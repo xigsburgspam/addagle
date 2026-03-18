@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 
-export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> = ({ onStart }) => {
+export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void; onWatchFootball: () => void }> = ({ onStart, onWatchFootball }) => {
   const { user, userData, loading } = useFirebase();
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
@@ -20,7 +20,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
     totalAccounts: 0
   });
 
-  // Live counters from /api/stats (online, video chatting, text chatting)
+  // Live counters from /api/stats
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -41,11 +41,10 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
 
     fetchStats();
     const interval = setInterval(fetchStats, 5000);
-
     return () => clearInterval(interval);
   }, []);
 
-  // Persistent counters from Firestore (totalVideoChats, totalTextChats, totalAccounts)
+  // Persistent counters from Firestore
   useEffect(() => {
     const statsRef = doc(db, 'stats', 'global');
     const unsub = onSnapshot(statsRef, (snap) => {
@@ -77,10 +76,10 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
   return (
     <div className="min-h-screen bg-neutral-950 text-white selection:bg-emerald-500/30 overflow-x-hidden">
       {/* Background Grid Pattern */}
-      <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" 
+      <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none"
            style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-      
-      {/* Header with Language Switcher */}
+
+      {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 p-6 flex justify-between items-center bg-gradient-to-b from-neutral-950 to-transparent">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
@@ -90,21 +89,21 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
         </div>
 
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => setIsAdminPopupOpen(true)}
-            className="px-4 py-3 bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-xl text-neutral-500 hover:text-emerald-500 hover:border-emerald-500/30 transition-all group flex items-center gap-2"
+            className="px-4 py-3 bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-xl text-neutral-500 hover:text-emerald-500 hover:border-emerald-500/30 transition-all flex items-center gap-2"
           >
             <span className="text-[10px] font-black uppercase tracking-widest">{t.adminInfo}</span>
           </button>
 
           <div className="flex items-center gap-2 bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 p-1 rounded-xl">
-            <button 
+            <button
               onClick={() => setLanguage('en')}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${language === 'en' ? 'bg-emerald-500 text-black' : 'text-neutral-500 hover:text-white'}`}
             >
               EN
             </button>
-            <button 
+            <button
               onClick={() => setLanguage('bn')}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${language === 'bn' ? 'bg-emerald-500 text-black' : 'text-neutral-500 hover:text-white'}`}
             >
@@ -117,7 +116,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
       {/* Hero Section */}
       <main className="relative z-10 max-w-5xl mx-auto px-6 pt-32 pb-40">
         <div className="flex flex-col items-center text-center">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -127,21 +126,23 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
               <Zap className="w-3 h-3" />
               Next-Gen Video Protocol
             </div>
-            
-            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[100px] font-black tracking-tighter leading-[0.85] mb-10 uppercase  bg-gradient-to-br from-white via-white to-neutral-600 bg-clip-text text-transparent">
+
+            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[100px] font-black tracking-tighter leading-[0.85] mb-10 uppercase bg-gradient-to-br from-white via-white to-neutral-600 bg-clip-text text-transparent">
               {t.tagline.split(' ').map((word, i) => (
                 <React.Fragment key={i}>
-                  {word === 'Strangers' || word === 'অপরিচিতদের' ? <span className="text-emerald-500 bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{word}</span> : word}
+                  {word === 'Strangers' || word === 'অপরিচিতদের'
+                    ? <span className="text-emerald-500 bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{word}</span>
+                    : word}
                   {i === 1 && <br />}
                   {' '}
                 </React.Fragment>
               ))}
             </h1>
-            
+
             <p className="text-xl text-neutral-400 max-w-2xl mx-auto mb-12 leading-relaxed font-medium">
               {t.description}
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center w-full">
               {user ? (
                 userData?.isBlocked ? (
@@ -150,24 +151,34 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
                   </div>
                 ) : (
                   <>
-                    <button 
+                    <button
                       onClick={() => onStart('video')}
                       className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto"
                     >
                       {t.startEncounter}
                       <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />
                     </button>
-                    <button 
+
+                    <button
                       onClick={() => onStart('text')}
                       className="group relative bg-neutral-900 border border-neutral-800 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:border-emerald-500/50 hover:bg-gradient-to-r hover:from-neutral-900 hover:to-neutral-800 transition-all duration-500 w-full sm:w-auto"
                     >
                       {t.startTextChat}
                       <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
                     </button>
+
+                    <button
+                      onClick={onWatchFootball}
+                      className="group relative overflow-hidden bg-gradient-to-r from-green-600 to-emerald-700 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-green-500 hover:to-emerald-600 transition-all duration-500 shadow-2xl shadow-green-900/40 w-full sm:w-auto"
+                    >
+                      <span className="absolute top-1 right-2 text-[8px] font-black text-green-300/70 uppercase tracking-widest animate-pulse">● LIVE</span>
+                      <Tv2 className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
+                      Watch Football
+                    </button>
                   </>
                 )
               ) : (
-                <button 
+                <button
                   onClick={handleLogin}
                   className="group bg-neutral-900 border border-neutral-800 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-4 hover:bg-neutral-800 transition-all duration-500 w-full sm:w-auto"
                 >
@@ -182,6 +193,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
               )}
             </div>
 
+            {/* Stats Grid */}
             <div className="mt-16 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-8 w-full text-left">
               <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-emerald-500/30 transition-all">
                 <div className="flex items-center gap-2 text-emerald-500">
@@ -218,13 +230,6 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
                 </div>
                 <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalTextChats}</span>
               </div>
-              <div className="flex flex-col gap-1 p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition-all">
-                <div className="flex items-center gap-2 text-neutral-600">
-                  <UserCheck className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Accounts Created</span>
-                 </div>
-                <span className="text-2xl font-black tabular-nums text-neutral-600">{stats.totalAccounts}</span>
-              </div>
             </div>
           </motion.div>
         </div>
@@ -234,25 +239,21 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
       <section className="relative z-10 border-t border-neutral-900 bg-neutral-950 py-32">
         <div className="max-w-7xl mx-auto px-6">
           <div className="mb-20">
-            <h2 className="text-4xl font-black tracking-tighter uppercase  mb-4">{t.protocol}</h2>
+            <h2 className="text-4xl font-black tracking-tighter uppercase mb-4">{t.protocol}</h2>
             <p className="text-neutral-500 font-medium">{t.protocolDesc}</p>
           </div>
-          
+
           <div className="grid md:grid-cols-12 gap-6">
             <div className="md:col-span-8 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Shield className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter  bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.activeModeration}</h3>
-              <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">
-                {t.activeModerationDesc}
-              </p>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.activeModeration}</h3>
+              <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">{t.activeModerationDesc}</p>
             </div>
-            
+
             <div className="md:col-span-4 p-12 rounded-[40px] bg-gradient-to-br from-emerald-500 to-emerald-600 text-black group overflow-hidden relative">
               <Zap className="w-12 h-12 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter ">{t.instantMatch}</h3>
-              <p className="text-black/70 text-lg leading-relaxed font-bold">
-                {t.instantMatchDesc}
-              </p>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter">{t.instantMatch}</h3>
+              <p className="text-black/70 text-lg leading-relaxed font-bold">{t.instantMatchDesc}</p>
               <div className="absolute -bottom-10 -right-10 opacity-10">
                 <Zap className="w-40 h-40" />
               </div>
@@ -260,18 +261,14 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
 
             <div className="md:col-span-4 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <MessageSquare className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter  bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.zeroHistory}</h3>
-              <p className="text-neutral-400 leading-relaxed">
-                {t.zeroHistoryDesc}
-              </p>
+              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.zeroHistory}</h3>
+              <p className="text-neutral-400 leading-relaxed">{t.zeroHistoryDesc}</p>
             </div>
 
             <div className="md:col-span-8 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Ghost className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter  bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.visualVerification}</h3>
-              <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">
-                {t.visualVerificationDesc}
-              </p>
+              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.visualVerification}</h3>
+              <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">{t.visualVerificationDesc}</p>
             </div>
           </div>
         </div>
@@ -286,9 +283,7 @@ export const HomePage: React.FC<{ onStart: (mode: 'video' | 'text') => void }> =
             </div>
             <span className="text-2xl font-black tracking-widest uppercase font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.appName}</span>
           </div>
-          <p className="text-neutral-600 text-xs font-bold uppercase tracking-[0.3em]">
-            {t.copyright}
-          </p>
+          <p className="text-neutral-600 text-xs font-bold uppercase tracking-[0.3em]">{t.copyright}</p>
           <div className="flex gap-8">
             <Link to="/terms" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">{t.terms}</Link>
             <Link to="/privacy" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">{t.privacy}</Link>

@@ -8,11 +8,9 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { readFileSync } from 'fs';
 
-// Load firebase config — resolve relative to source root, works in both dev and prod
 const configPath = new URL('../firebase-applet-config.json', import.meta.url);
 const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
 
-// Initialize Firebase Admin (only once)
 if (!getApps().length) {
   initializeApp({
     projectId: firebaseConfig.projectId,
@@ -33,10 +31,9 @@ async function startServer() {
   });
   const PORT = 3000;
 
-  // Matchmaking queues
   let waitingVideoUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
   let waitingTextUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
-  
+
   const activeMatches = new Map<string, string>();
   const userModes = new Map<string, 'video' | 'text'>();
   const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
@@ -44,16 +41,17 @@ async function startServer() {
   let totalVideoChats = 0;
   let totalTextChats = 0;
 
+  // Football public chat rooms — matchId → { names: Set<string> }
+  const footballRooms = new Map<string, { names: Set<string> }>();
+
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    // Join matchmaking queue
     socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
       console.log('User joined queue:', socket.id, 'Mode:', mode, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
-      
+
       userModes.set(socket.id, mode);
 
-      // If already in a match, clean it up
       const currentPartner = activeMatches.get(socket.id);
       if (currentPartner) {
         io.to(currentPartner).emit('partner-skipped');
@@ -65,7 +63,6 @@ async function startServer() {
       let waitingUser = isVideo ? waitingVideoUser : waitingTextUser;
 
       if (waitingUser && waitingUser.socketId !== socket.id) {
-        // Match found
         const partner = waitingUser;
         if (isVideo) waitingVideoUser = null;
         else waitingTextUser = null;
@@ -80,14 +77,14 @@ async function startServer() {
         const peerIdsMap = new Map();
         peerIdsMap.set(socket.id, peerId);
         peerIdsMap.set(partner.socketId, partner.peerId);
-        
+
         const metadataMap = new Map();
         metadataMap.set(socket.id, { uid, email, isAdmin });
         metadataMap.set(partner.socketId, { uid: partner.uid, email: partner.email, isAdmin: partner.isAdmin });
 
-        rooms.set(roomId, { 
+        rooms.set(roomId, {
           type: mode,
-          users: [socket.id, partner.socketId], 
+          users: [socket.id, partner.socketId],
           peerIds: peerIdsMap,
           metadata: metadataMap
         });
@@ -95,7 +92,6 @@ async function startServer() {
         if (isVideo) totalVideoChats++;
         else totalTextChats++;
 
-        // Persist to Firestore
         adminDb.collection('stats').doc('global').set(
           isVideo
             ? { totalVideoChats: FieldValue.increment(1) }
@@ -103,33 +99,30 @@ async function startServer() {
           { merge: true }
         ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
-        // Notify both users
-        io.to(socket.id).emit('matched', { 
-          partnerId: partner.socketId, 
-          partnerPeerId: partner.peerId, 
+        io.to(socket.id).emit('matched', {
+          partnerId: partner.socketId,
+          partnerPeerId: partner.peerId,
           partnerUid: partner.uid,
           partnerEmail: partner.email,
           isPartnerAdmin: partner.isAdmin,
-          initiator: true, 
-          roomId 
+          initiator: true,
+          roomId
         });
-        io.to(partner.socketId).emit('matched', { 
-          partnerId: socket.id, 
-          partnerPeerId: peerId, 
+        io.to(partner.socketId).emit('matched', {
+          partnerId: socket.id,
+          partnerPeerId: peerId,
           partnerUid: uid,
           partnerEmail: email,
           isPartnerAdmin: isAdmin,
-          initiator: false, 
-          roomId 
+          initiator: false,
+          roomId
         });
       } else {
-        // Add to queue
         if (isVideo) waitingVideoUser = { socketId: socket.id, peerId, uid, email, isAdmin };
         else waitingTextUser = { socketId: socket.id, peerId, uid, email, isAdmin };
       }
     });
 
-    // Chat
     socket.on('send-chat-message', ({ roomId, message }) => {
       socket.to(roomId).emit('chat-message', message);
     });
@@ -142,7 +135,6 @@ async function startServer() {
       socket.to(roomId).emit('typing-stop');
     });
 
-    // Message delivery/seen receipts
     socket.on('message-delivered', ({ roomId, messageId }) => {
       socket.to(roomId).emit('message-delivered', { messageId });
     });
@@ -151,12 +143,10 @@ async function startServer() {
       socket.to(roomId).emit('message-seen', { messageId });
     });
 
-    // Message reactions
     socket.on('message-reaction', ({ roomId, messageId, emoji }) => {
       socket.to(roomId).emit('message-reaction', { messageId, emoji });
     });
 
-    // Reactions
     socket.on('reaction', (data) => {
       if (data.roomId) {
         socket.to(data.roomId).emit('reaction', {
@@ -171,15 +161,13 @@ async function startServer() {
       }
     });
 
-    // Next/Skip
     socket.on('next', () => {
       const partnerId = activeMatches.get(socket.id);
       if (partnerId) {
         io.to(partnerId).emit('partner-skipped');
         activeMatches.delete(partnerId);
         activeMatches.delete(socket.id);
-        
-        // Find and delete room
+
         for (const [roomId, room] of rooms.entries()) {
           if (room.users.includes(socket.id)) {
             rooms.delete(roomId);
@@ -191,13 +179,65 @@ async function startServer() {
       if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
     });
 
+    // ── Football public chat ────────────────────────────────────────────────
+
+    socket.on('football-check-name', ({ matchId, name }: { matchId: string; name: string }) => {
+      const room = footballRooms.get(matchId);
+      const taken = room ? room.names.has(name.toLowerCase()) : false;
+      socket.emit('football-name-result', { available: !taken });
+    });
+
+    socket.on('football-join', ({ matchId, name }: { matchId: string; name: string }) => {
+      if (!footballRooms.has(matchId)) {
+        footballRooms.set(matchId, { names: new Set() });
+      }
+      const room = footballRooms.get(matchId)!;
+      if (room.names.has(name.toLowerCase())) {
+        socket.emit('football-name-result', { available: false });
+        return;
+      }
+      room.names.add(name.toLowerCase());
+      (socket as any)._footballMatch = matchId;
+      (socket as any)._footballName  = name;
+      socket.join(`football:${matchId}`);
+      io.to(`football:${matchId}`).emit('football-system', { text: `${name} has joined` });
+      socket.emit('football-joined', { name });
+    });
+
+    socket.on('football-message', ({ matchId, text }: { matchId: string; text: string }) => {
+      const name = (socket as any)._footballName;
+      if (!name) return;
+      io.to(`football:${matchId}`).emit('football-chat', { name, text, ts: Date.now() });
+    });
+
+    socket.on('football-typing-start', ({ matchId }: { matchId: string }) => {
+      const name = (socket as any)._footballName;
+      if (!name) return;
+      socket.to(`football:${matchId}`).emit('football-typing-start', { name });
+    });
+
+    socket.on('football-typing-stop', ({ matchId }: { matchId: string }) => {
+      const name = (socket as any)._footballName;
+      if (!name) return;
+      socket.to(`football:${matchId}`).emit('football-typing-stop', { name });
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
       if (waitingVideoUser?.socketId === socket.id) waitingVideoUser = null;
       if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
-      
+
       userModes.delete(socket.id);
+
+      // Football room cleanup
+      const fMatch = (socket as any)._footballMatch;
+      const fName  = (socket as any)._footballName;
+      if (fMatch && fName) {
+        const fRoom = footballRooms.get(fMatch);
+        if (fRoom) fRoom.names.delete(fName.toLowerCase());
+        io.to(`football:${fMatch}`).emit('football-system', { text: `${fName} has left` });
+      }
 
       const partnerId = activeMatches.get(socket.id);
       if (partnerId) {
@@ -216,6 +256,50 @@ async function startServer() {
   });
 
   // API routes
+  app.use(express.json());
+
+  app.get('/api/football/matches', async (req, res) => {
+    try {
+      const snap = await adminDb.collection('football_matches').where('live', '==', true).get();
+      const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json(matches);
+    } catch (e) {
+      res.json([]);
+    }
+  });
+
+  app.post('/api/football/matches', async (req, res) => {
+    try {
+      const { teamA, teamB, league, streamUrl } = req.body;
+      const ref = await adminDb.collection('football_matches').add({
+        teamA, teamB, league, streamUrl,
+        live: true,
+        createdAt: new Date().toISOString(),
+      });
+      res.json({ id: ref.id });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to add match' });
+    }
+  });
+
+  app.delete('/api/football/matches/:id', async (req, res) => {
+    try {
+      await adminDb.collection('football_matches').doc(req.params.id).delete();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed' });
+    }
+  });
+
+  app.patch('/api/football/matches/:id', async (req, res) => {
+    try {
+      await adminDb.collection('football_matches').doc(req.params.id).update(req.body);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed' });
+    }
+  });
+
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
   });
@@ -243,7 +327,6 @@ async function startServer() {
     res.json(activeRooms);
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
