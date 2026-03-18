@@ -19,24 +19,84 @@ const BANGLADESH_DISTRICTS = [
   "Sherpur", "Jamalpur", "Netrokona", "Mymensingh"
 ];
 
-// Approximate relative positions (0-100) for the SVG map
-const DISTRICT_POSITIONS: Record<string, { x: number; y: number }> = {
-  "Panchagarh": { x: 25, y: 5 }, "Thakurgaon": { x: 20, y: 10 }, "Nilphamari": { x: 35, y: 10 }, "Lalmonirhat": { x: 45, y: 12 }, "Kurigram": { x: 55, y: 15 },
-  "Dinajpur": { x: 28, y: 18 }, "Rangpur": { x: 40, y: 18 }, "Gaibandha": { x: 50, y: 22 }, "Joypurhat": { x: 35, y: 28 }, "Naogaon": { x: 25, y: 32 },
-  "Bogra": { x: 45, y: 32 }, "Chapai Nawabganj": { x: 10, y: 40 }, "Rajshahi": { x: 22, y: 45 }, "Natore": { x: 35, y: 45 }, "Sirajganj": { x: 48, y: 42 },
-  "Pabna": { x: 38, y: 55 }, "Kushtia": { x: 25, y: 58 }, "Meherpur": { x: 15, y: 62 }, "Chuadanga": { x: 18, y: 68 }, "Jhenaidah": { x: 28, y: 68 },
-  "Magura": { x: 35, y: 72 }, "Rajbari": { x: 45, y: 65 }, "Faridpur": { x: 50, y: 72 }, "Manikganj": { x: 55, y: 62 }, "Tangail": { x: 58, y: 48 },
-  "Jamalpur": { x: 58, y: 35 }, "Sherpur": { x: 65, y: 28 }, "Mymensingh": { x: 70, y: 35 }, "Netrokona": { x: 80, y: 32 }, "Kishoreganj": { x: 82, y: 45 },
-  "Sunamganj": { x: 90, y: 25 }, "Sylhet": { x: 95, y: 35 }, "Moulvibazar": { x: 92, y: 45 }, "Habiganj": { x: 88, y: 52 }, "Brahmanbaria": { x: 80, y: 58 },
-  "Narsingdi": { x: 72, y: 62 }, "Gazipur": { x: 65, y: 58 }, "Dhaka": { x: 65, y: 68 }, "Narayanganj": { x: 72, y: 72 }, "Munshiganj": { x: 68, y: 78 },
-  "Shariatpur": { x: 75, y: 82 }, "Madaripur": { x: 62, y: 82 }, "Gopalganj": { x: 55, y: 85 }, "Narail": { x: 42, y: 78 }, "Jessore": { x: 30, y: 78 },
-  "Satkhira": { x: 28, y: 90 }, "Khulna": { x: 38, y: 88 }, "Bagerhat": { x: 48, y: 92 }, "Pirojpur": { x: 55, y: 92 }, "Jhalokati": { x: 60, y: 90 },
-  "Barisal": { x: 68, y: 88 }, "Bhola": { x: 78, y: 92 }, "Lakshmipur": { x: 85, y: 85 }, "Chandpur": { x: 80, y: 78 }, "Comilla": { x: 88, y: 68 },
-  "Feni": { x: 92, y: 78 }, "Noakhali": { x: 88, y: 88 }, "Patuakhali": { x: 72, y: 95 }, "Barguna": { x: 65, y: 98 }, "Chittagong": { x: 95, y: 88 },
-  "Khagrachhari": { x: 98, y: 65 }, "Rangamati": { x: 99, y: 75 }, "Bandarban": { x: 98, y: 95 }, "Cox's Bazar": { x: 95, y: 99 }
+// Accurate geographical positions for all 64 districts of Bangladesh
+// x: 0-100 (west to east), y: 0-100 (north to south)
+const DISTRICT_GEO: Record<string, { x: number; y: number }> = {
+  // Rangpur Division (northwest)
+  "Panchagarh":     { x: 28, y: 4 },
+  "Thakurgaon":     { x: 22, y: 9 },
+  "Dinajpur":       { x: 18, y: 17 },
+  "Nilphamari":     { x: 34, y: 10 },
+  "Lalmonirhat":    { x: 42, y: 11 },
+  "Kurigram":       { x: 52, y: 12 },
+  "Rangpur":        { x: 38, y: 18 },
+  "Gaibandha":      { x: 48, y: 22 },
+  // Rajshahi Division (west)
+  "Joypurhat":      { x: 36, y: 28 },
+  "Naogaon":        { x: 24, y: 32 },
+  "Bogra":          { x: 44, y: 32 },
+  "Chapai Nawabganj": { x: 10, y: 40 },
+  "Rajshahi":       { x: 18, y: 44 },
+  "Natore":         { x: 32, y: 43 },
+  "Sirajganj":      { x: 48, y: 40 },
+  "Pabna":          { x: 36, y: 52 },
+  // Khulna Division (southwest)
+  "Kushtia":        { x: 26, y: 58 },
+  "Meherpur":       { x: 14, y: 60 },
+  "Chuadanga":      { x: 16, y: 66 },
+  "Jhenaidah":      { x: 26, y: 66 },
+  "Magura":         { x: 34, y: 71 },
+  "Narail":         { x: 38, y: 76 },
+  "Jessore":        { x: 24, y: 75 },
+  "Satkhira":       { x: 14, y: 84 },
+  "Khulna":         { x: 28, y: 84 },
+  "Bagerhat":       { x: 38, y: 88 },
+  // Barisal Division (south)
+  "Rajbari":        { x: 44, y: 62 },
+  "Faridpur":       { x: 48, y: 68 },
+  "Gopalganj":      { x: 46, y: 78 },
+  "Pirojpur":       { x: 48, y: 86 },
+  "Jhalokati":      { x: 54, y: 87 },
+  "Barisal":        { x: 60, y: 84 },
+  "Bhola":          { x: 70, y: 85 },
+  "Patuakhali":     { x: 62, y: 91 },
+  "Barguna":        { x: 52, y: 93 },
+  // Dhaka Division (central)
+  "Manikganj":      { x: 52, y: 59 },
+  "Tangail":        { x: 55, y: 48 },
+  "Dhaka":          { x: 60, y: 64 },
+  "Narayanganj":    { x: 64, y: 68 },
+  "Munshiganj":     { x: 62, y: 74 },
+  "Madaripur":      { x: 56, y: 78 },
+  "Shariatpur":     { x: 66, y: 78 },
+  // Mymensingh Division (north-central)
+  "Jamalpur":       { x: 56, y: 34 },
+  "Sherpur":        { x: 64, y: 28 },
+  "Mymensingh":     { x: 66, y: 36 },
+  "Netrokona":      { x: 74, y: 32 },
+  // Sylhet Division (northeast)
+  "Kishoreganj":    { x: 74, y: 46 },
+  "Sunamganj":      { x: 82, y: 26 },
+  "Sylhet":         { x: 90, y: 33 },
+  "Moulvibazar":    { x: 86, y: 42 },
+  "Habiganj":       { x: 80, y: 50 },
+  // Comilla/Chittagong Division (east/southeast)
+  "Brahmanbaria":   { x: 76, y: 57 },
+  "Narsingdi":      { x: 70, y: 60 },
+  "Gazipur":        { x: 62, y: 57 },
+  "Comilla":        { x: 80, y: 66 },
+  "Chandpur":       { x: 72, y: 72 },
+  "Lakshmipur":     { x: 78, y: 78 },
+  "Noakhali":       { x: 80, y: 84 },
+  "Feni":           { x: 84, y: 76 },
+  "Chittagong":     { x: 88, y: 86 },
+  "Cox's Bazar":    { x: 88, y: 95 },
+  "Khagrachhari":   { x: 90, y: 72 },
+  "Rangamati":      { x: 92, y: 80 },
+  "Bandarban":      { x: 92, y: 90 },
 };
 
-const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => void; onClose: () => void }> = ({ onConfirm, onClose }) => {
+const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => void; onClose: () => void; userEmail?: string }> = ({ onConfirm, onClose, userEmail }) => {
   const [name, setName] = useState('');
   const [save, setSave] = useState(false);
   const [error, setError] = useState('');
@@ -49,6 +109,10 @@ const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => 
     }
     if (containsBanned(trimmed)) {
       setError('That name contains prohibited words.');
+      return;
+    }
+    if (trimmed.toLowerCase() === 'admin' && userEmail !== 'edublitz71@gmail.com') {
+      setError('This username is reserved.');
       return;
     }
     onConfirm(trimmed, save);
@@ -111,69 +175,266 @@ const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => 
   );
 };
 
-const BangladeshMap: React.FC<{ districtUsers: Record<string, number> }> = ({ districtUsers }) => {
+const BangladeshMap: React.FC<{
+  districtUsers: Record<string, number>;
+  districtRoomUsers: Record<string, number>;
+  districtWaiting: Record<string, boolean>;
+}> = ({ districtUsers, districtRoomUsers, districtWaiting }) => {
   const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
 
-  return (
-    <div className="w-full aspect-[4/5] max-h-[600px] rounded-[40px] overflow-hidden border border-neutral-800 bg-neutral-900/50 relative p-8 flex items-center justify-center">
-      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-2xl">
-        {/* More accurate Bangladesh Outline */}
-        <path
-          d="M30,5 L40,2 L55,5 L65,10 L75,15 L85,20 L95,25 L98,40 L95,60 L98,75 L95,85 L88,95 L80,98 L70,95 L60,98 L50,95 L40,98 L30,95 L20,98 L10,90 L5,80 L2,65 L5,50 L2,35 L10,20 L20,10 Z"
-          fill="rgba(16, 185, 129, 0.03)"
-          stroke="rgba(16, 185, 129, 0.2)"
-          strokeWidth="0.3"
-        />
-        
-        {/* District points */}
-        {Object.entries(DISTRICT_POSITIONS).map(([name, pos]) => {
-          const count = districtUsers[name] || 0;
-          const isActive = count > 0;
-          
-          return (
-            <g 
-              key={name} 
-              onMouseEnter={() => setHoveredDistrict(name)}
-              onMouseLeave={() => setHoveredDistrict(null)}
-              className="cursor-pointer"
-            >
-              {/* Pulse effect for active districts */}
-              {isActive && (
-                <circle cx={pos.x} cy={pos.y} r="1.5" fill="#10b981" className="animate-ping opacity-20" />
-              )}
-              
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={isActive ? "0.8" : "0.4"}
-                fill={isActive ? "#10b981" : "#404040"}
-                className="transition-all duration-300"
-              />
+  // Determine display info per district
+  const getDistrictStatus = (name: string) => {
+    const roomUsers = districtRoomUsers[name] || 0;
+    const isWaiting = districtWaiting[name] === true;
+    const onlineCount = districtUsers[name] || 0;
+    if (isWaiting) return { status: 'waiting', count: roomUsers, online: onlineCount };
+    if (roomUsers > 0) return { status: 'active', count: roomUsers, online: onlineCount };
+    if (onlineCount > 0) return { status: 'online', count: onlineCount, online: onlineCount };
+    return { status: 'idle', count: 0, online: 0 };
+  };
 
-              {hoveredDistrict === name && (
-                <foreignObject x={pos.x + 2} y={pos.y - 5} width="40" height="10">
-                  <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded px-2 py-1 text-[4px] font-black text-white whitespace-nowrap">
-                    {name}: {count}
-                  </div>
-                </foreignObject>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      
-      <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-400">Active Districts</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-neutral-700" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Inactive</span>
+  return (
+    <div className="w-full relative" style={{ maxWidth: 520 }}>
+      {/* Neon glow border container */}
+      <div
+        className="relative rounded-3xl overflow-hidden"
+        style={{
+              background: 'linear-gradient(135deg, #0a0f0a 0%, #050d08 100%)',
+              padding: 3,
+        }}
+      >
+        <div
+          className="rounded-3xl relative overflow-hidden"
+          style={{ background: '#060d08', minHeight: 500 }}
+        >
+          {/* Animated neon border inner glow */}
+          <div
+            className="absolute inset-0 rounded-3xl pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse at 50% 0%, #00ff8815 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, #00ff8810 0%, transparent 60%)',
+              zIndex: 1,
+            }}
+          />
+
+          {/* Grid bg */}
+          <div
+            className="absolute inset-0 opacity-[0.04]"
+            style={{ backgroundImage: 'linear-gradient(#00ff88 1px, transparent 1px), linear-gradient(90deg, #00ff88 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+          />
+
+          <svg
+            viewBox="0 0 100 100"
+            className="w-full relative"
+            style={{ zIndex: 2, display: 'block' }}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Bangladesh country outline — stylized polygon */}
+            <polygon
+              points="28,2 42,1 56,4 64,7 72,12 82,16 90,22 96,30 97,42 96,55 98,68 96,78 90,87 84,94 76,98 64,99 52,97 40,98 28,96 18,90 10,82 4,72 2,60 4,48 2,36 8,24 16,14 22,8"
+              fill="rgba(0,255,136,0.04)"
+              stroke="#00ff88"
+              strokeWidth="0.6"
+              strokeLinejoin="round"
+              style={{ filter: 'drop-shadow(0 0 2px #00ff88)' }}
+            />
+
+            {/* Division region subtle fills */}
+            {/* Rangpur - top left */}
+            <polygon points="22,2 56,2 52,26 36,26 18,26 14,14" fill="rgba(0,200,100,0.05)" stroke="none" />
+            {/* Rajshahi - mid left */}
+            <polygon points="8,38 52,38 52,56 36,56 14,56 8,46" fill="rgba(0,180,120,0.04)" stroke="none" />
+            {/* Khulna - bottom left */}
+            <polygon points="8,56 40,56 42,96 16,92 6,78 4,64" fill="rgba(0,160,100,0.04)" stroke="none" />
+            {/* Barisal - bottom center */}
+            <polygon points="40,68 72,68 72,98 40,98" fill="rgba(0,140,100,0.04)" stroke="none" />
+            {/* Dhaka - center */}
+            <polygon points="44,44 76,44 76,70 44,70" fill="rgba(0,220,130,0.04)" stroke="none" />
+            {/* Mymensingh - north center */}
+            <polygon points="52,22 82,22 82,46 52,46" fill="rgba(0,200,110,0.04)" stroke="none" />
+            {/* Sylhet - northeast */}
+            <polygon points="72,18 98,18 98,58 72,58" fill="rgba(0,180,100,0.04)" stroke="none" />
+            {/* Chittagong/CHT - east */}
+            <polygon points="74,56 98,56 98,99 72,99" fill="rgba(0,160,90,0.04)" stroke="none" />
+
+            {/* Division labels — very subtle */}
+            {[
+              { label: 'Rangpur', x: 35, y: 16 },
+              { label: 'Rajshahi', x: 26, y: 44 },
+              { label: 'Khulna', x: 22, y: 75 },
+              { label: 'Barisal', x: 56, y: 88 },
+              { label: 'Dhaka', x: 58, y: 62 },
+              { label: 'Mymensingh', x: 65, y: 36 },
+              { label: 'Sylhet', x: 85, y: 36 },
+              { label: 'Chittagong', x: 86, y: 80 },
+            ].map(d => (
+              <text key={d.label} x={d.x} y={d.y} fontSize="2.2" fill="rgba(0,255,136,0.15)" textAnchor="middle" fontWeight="bold" style={{ letterSpacing: '0.05em', userSelect: 'none' }}>
+                {d.label.toUpperCase()}
+              </text>
+            ))}
+
+            {/* District dots + labels */}
+            {Object.entries(DISTRICT_GEO).map(([name, pos]) => {
+              const { status, count, online } = getDistrictStatus(name);
+              const isHovered = hoveredDistrict === name;
+
+              const dotColor =
+                status === 'active' ? '#00ff88' :
+                status === 'waiting' ? '#ffaa00' :
+                status === 'online' ? '#00aaff' :
+                '#1a3a26';
+
+              const dotRadius =
+                status === 'active' ? 1.4 :
+                status === 'waiting' ? 1.2 :
+                status === 'online' ? 0.9 :
+                0.55;
+
+              const glowFilter =
+                status === 'active' ? 'drop-shadow(0 0 2px #00ff88)' :
+                status === 'waiting' ? 'drop-shadow(0 0 2px #ffaa00)' :
+                status === 'online' ? 'drop-shadow(0 0 1.5px #00aaff)' :
+                'none';
+
+              return (
+                <g
+                  key={name}
+                  onMouseEnter={() => setHoveredDistrict(name)}
+                  onMouseLeave={() => setHoveredDistrict(null)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {/* Pulse ring for active districts */}
+                  {status === 'active' && (
+                    <circle cx={pos.x} cy={pos.y} r="2.5" fill="none" stroke="#00ff88" strokeWidth="0.3" opacity="0.3" className="animate-ping" />
+                  )}
+                  {status === 'waiting' && (
+                    <circle cx={pos.x} cy={pos.y} r="2" fill="none" stroke="#ffaa00" strokeWidth="0.3" opacity="0.4" className="animate-ping" />
+                  )}
+
+                  {/* Main dot */}
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={isHovered ? dotRadius * 1.6 : dotRadius}
+                    fill={dotColor}
+                    style={{ filter: glowFilter, transition: 'r 0.15s' }}
+                  />
+
+                  {/* District name label */}
+                  <text
+                    x={pos.x}
+                    y={pos.y + dotRadius + 2.2}
+                    fontSize={isHovered ? "1.9" : "1.55"}
+                    fill={
+                      status === 'active' ? '#00ff88' :
+                      status === 'waiting' ? '#ffaa00' :
+                      status === 'online' ? '#44aaff' :
+                      '#2a5040'
+                    }
+                    textAnchor="middle"
+                    style={{
+                      fontWeight: status !== 'idle' ? 'bold' : 'normal',
+                      letterSpacing: '0.02em',
+                      userSelect: 'none',
+                      transition: 'font-size 0.15s',
+                    }}
+                  >
+                    {name}
+                  </text>
+
+                  {/* User count badge for active/waiting */}
+                  {(status === 'active' || status === 'waiting') && count > 0 && (
+                    <g>
+                      <rect
+                        x={pos.x + dotRadius}
+                        y={pos.y - dotRadius - 2.5}
+                        width={count >= 10 ? 5 : 3.5}
+                        height="2.5"
+                        rx="1"
+                        fill={status === 'waiting' ? '#ffaa0022' : '#00ff8822'}
+                        stroke={status === 'waiting' ? '#ffaa00' : '#00ff88'}
+                        strokeWidth="0.2"
+                      />
+                      <text
+                        x={pos.x + dotRadius + (count >= 10 ? 2.5 : 1.75)}
+                        y={pos.y - dotRadius - 0.6}
+                        fontSize="1.6"
+                        fill={status === 'waiting' ? '#ffaa00' : '#00ff88'}
+                        textAnchor="middle"
+                        fontWeight="bold"
+                        style={{ userSelect: 'none' }}
+                      >
+                        {count}
+                      </text>
+                    </g>
+                  )}
+
+                  {/* Tooltip on hover */}
+                  {isHovered && (
+                    <g>
+                      <rect
+                        x={Math.min(pos.x - 12, 78)}
+                        y={pos.y - 10}
+                        width={26}
+                        height={status !== 'idle' ? 10 : 7}
+                        rx="1.5"
+                        fill="#0a1a10"
+                        stroke={dotColor}
+                        strokeWidth="0.3"
+                        style={{ filter: `drop-shadow(0 0 3px ${dotColor})` }}
+                      />
+                      <text
+                        x={Math.min(pos.x - 12, 78) + 13}
+                        y={pos.y - 5.5}
+                        fontSize="1.9"
+                        fill="white"
+                        textAnchor="middle"
+                        fontWeight="bold"
+                        style={{ userSelect: 'none' }}
+                      >
+                        {name}
+                      </text>
+                      {status !== 'idle' && (
+                        <text
+                          x={Math.min(pos.x - 12, 78) + 13}
+                          y={pos.y - 2}
+                          fontSize="1.7"
+                          fill={dotColor}
+                          textAnchor="middle"
+                          style={{ userSelect: 'none' }}
+                        >
+                          {status === 'waiting' ? `⏳ ${count} waiting` :
+                           status === 'active' ? `💬 ${count} chatting` :
+                           `🌐 ${online} online`}
+                        </text>
+                      )}
+                    </g>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Legend */}
+          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-center gap-x-5 gap-y-2" style={{ zIndex: 3 }}>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full" style={{ background: '#00ff88', boxShadow: '0 0 6px #00ff88' }} />
+              <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#00ff88' }}>Chatting</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full" style={{ background: '#ffaa00', boxShadow: '0 0 6px #ffaa00' }} />
+              <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#ffaa00' }}>Waiting</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full" style={{ background: '#00aaff', boxShadow: '0 0 6px #00aaff' }} />
+              <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#00aaff' }}>Online</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-neutral-800" />
+              <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-600">Idle</span>
+            </div>
+            <span className="ml-auto text-[9px] font-black uppercase tracking-widest text-neutral-700">64 Districts · Bangladesh</span>
           </div>
         </div>
-        <span className="text-[10px] font-black uppercase tracking-tighter text-neutral-700">64 Districts Illustrated</span>
       </div>
     </div>
   );
@@ -198,7 +459,9 @@ export const HomePage: React.FC<{
     totalVideoChats: 0,
     totalTextChats: 0,
     totalAccounts: 0,
-    districtUsers: {} as Record<string, number>
+    districtUsers: {} as Record<string, number>,
+    districtRoomUsers: {} as Record<string, number>,
+    districtWaiting: {} as Record<string, boolean>
   });
 
   // Live counters from /api/stats
@@ -216,6 +479,8 @@ export const HomePage: React.FC<{
             customChatting: data.customChatting || 0,
             footballChatting: data.footballChatting || 0,
             districtUsers: data.districtUsers || {},
+            districtRoomUsers: data.districtRoomUsers || {},
+            districtWaiting: data.districtWaiting || {},
           }));
         }
       } catch (e) {
@@ -481,7 +746,11 @@ export const HomePage: React.FC<{
                   <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Map</span>
                 </div>
               </div>
-              <BangladeshMap districtUsers={stats.districtUsers} />
+              <BangladeshMap
+                districtUsers={stats.districtUsers}
+                districtRoomUsers={stats.districtRoomUsers}
+                districtWaiting={stats.districtWaiting}
+              />
             </div>
           </motion.div>
         </div>
@@ -550,6 +819,7 @@ export const HomePage: React.FC<{
         )}
         {showNamePrompt && (
           <DisplayNamePrompt
+            userEmail={user?.email ?? undefined}
             onConfirm={handleNameConfirm}
             onClose={() => {
               setShowNamePrompt(false);

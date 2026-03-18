@@ -600,34 +600,40 @@ async function startServer() {
       const violator = room.users.find(u => u.name === violatorName);
       const reporter = room.users.find(u => u.name === reporterName);
 
-      if (violator && reporter) {
-        try {
-          // Update in-memory blocked matches
-          if (reporter.uid && violator.uid) {
-            if (!blockedUsers.has(reporter.uid)) blockedUsers.set(reporter.uid, new Set());
-            blockedUsers.get(reporter.uid)!.add(violator.uid);
-            
-            if (!blockedUsers.has(violator.uid)) blockedUsers.set(violator.uid, new Set());
-            blockedUsers.get(violator.uid)!.add(reporter.uid);
-          }
+      // Always save the report — use room lookup for full data, fallback to socket properties
+      try {
+        const reporterId = reporter?.uid || (socket as any)._uid || 'anonymous';
+        const reporterEmail = reporter?.email || (socket as any)._email || 'anonymous';
+        const reportedId = violator?.uid || 'anonymous';
+        const reportedEmail = violator?.email || 'anonymous';
 
-          await adminDb.collection('reports').add({
-            reporterId: reporter.uid || 'anonymous',
-            reporterEmail: reporter.email || 'anonymous',
-            reporterName: reporter.name,
-            reportedId: violator.uid || 'anonymous',
-            reportedEmail: violator.email || 'anonymous',
-            reportedName: violator.name,
-            reason,
-            roomId,
-            timestamp: FieldValue.serverTimestamp()
-          });
-          console.log(`Report submitted to Firestore: ${reporterName} reported ${violatorName}`);
-        } catch (e) {
-          console.error('Failed to save custom report:', e);
+        // Update in-memory blocked matches if we have both UIDs
+        if (reporter?.uid && violator?.uid) {
+          if (!blockedUsers.has(reporter.uid)) blockedUsers.set(reporter.uid, new Set());
+          blockedUsers.get(reporter.uid)!.add(violator.uid);
+          if (!blockedUsers.has(violator.uid)) blockedUsers.set(violator.uid, new Set());
+          blockedUsers.get(violator.uid)!.add(reporter.uid);
         }
-      } else {
-        console.log(`Custom report failed: Violator (${violatorName}) or Reporter (${reporterName}) not found in room users`);
+
+        await adminDb.collection('reports').add({
+          reporterId,
+          reporterEmail,
+          reporterName: reporterName,
+          reportedId,
+          reportedEmail,
+          reportedName: violatorName,
+          reason,
+          roomId,
+          source: 'custom-chat',
+          timestamp: FieldValue.serverTimestamp()
+        });
+        console.log(`Report submitted to Firestore: ${reporterName} reported ${violatorName} in room ${roomId}`);
+      } catch (e) {
+        console.error('Failed to save custom report:', e);
+      }
+
+      if (!violator || !reporter) {
+        console.log(`Custom report note: Violator (${violatorName}) or Reporter (${reporterName}) not found live in room — report still saved`);
       }
     });
 
@@ -761,6 +767,17 @@ async function startServer() {
     const customChatting = Array.from(customRooms.values()).reduce((acc, r) => acc + r.users.length, 0);
     const footballChatting = Array.from(footballRooms.values()).reduce((acc, r) => acc + r.names.size, 0);
     const onlineUsers = io.engine.clientsCount;
+
+    // District room user counts (for users in district chat rooms)
+    const districtRoomUsers: Record<string, number> = {};
+    const districtWaiting: Record<string, boolean> = {};
+    for (const [roomId, room] of customRooms.entries()) {
+      if (room.mode === 'district' && room.district && room.users.length > 0) {
+        districtRoomUsers[room.district] = room.users.length;
+        districtWaiting[room.district] = room.users.length < 2;
+      }
+    }
+
     res.json({
       onlineUsers,
       videoChatting,
@@ -769,7 +786,9 @@ async function startServer() {
       footballChatting,
       totalVideoChats,
       totalTextChats,
-      districtUsers: Object.fromEntries(districtUsers)
+      districtUsers: Object.fromEntries(districtUsers),
+      districtRoomUsers,
+      districtWaiting
     });
   });
 
