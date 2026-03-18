@@ -142,6 +142,20 @@ async function startServer() {
       socket.to(roomId).emit('typing-stop');
     });
 
+    // Message delivery/seen receipts
+    socket.on('message-delivered', ({ roomId, messageId }) => {
+      socket.to(roomId).emit('message-delivered', { messageId });
+    });
+
+    socket.on('message-seen', ({ roomId, messageId }) => {
+      socket.to(roomId).emit('message-seen', { messageId });
+    });
+
+    // Message reactions
+    socket.on('message-reaction', ({ roomId, messageId, emoji }) => {
+      socket.to(roomId).emit('message-reaction', { messageId, emoji });
+    });
+
     // Reactions
     socket.on('reaction', (data) => {
       if (data.roomId) {

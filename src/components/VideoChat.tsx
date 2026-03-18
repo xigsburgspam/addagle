@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Video, VideoOff, Mic, MicOff, SkipForward, ThumbsUp, Hand, Smile, Users, PhoneOff, Flag, ShieldAlert, Terminal, Radio, Activity, X, AlertTriangle, Ghost, MessageSquare, ArrowRight, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,7 +33,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
     window.innerHeight > window.innerWidth ? 'portrait' : 'landscape'
   );
   
-  const [showIntro, setShowIntro] = useState(true);
+  const [showAgeConsent, setShowAgeConsent] = useState(true);
+  const [showIntro, setShowIntro] = useState(false);
+  const [faceDetectionWarning, setFaceDetectionWarning] = useState(false);
+  const faceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const faceCanvasRef = useRef<HTMLCanvasElement>(null);
+  const noFaceCountRef = useRef(0);
+
+  // Audio refs
+  const joinSoundRef = useRef<AudioContext | null>(null);
+  const disconnectSoundRef = useRef<AudioContext | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
   
@@ -81,7 +90,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       const errorType = err.type as string;
       if (['peer-unavailable', 'network', 'disconnected', 'negotiation-failed', 'webrtc', 'socket-closed', 'socket-error'].includes(errorType)) {
         handleDisconnect('Connection error: ' + errorType);
-        // If it's a socket error, we might need to reconnect or recreate
         if (errorType === 'socket-closed' || errorType === 'socket-error') {
           setTimeout(() => {
             if (peerRef.current && !peerRef.current.destroyed) {
@@ -114,9 +122,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
 
     window.addEventListener('resize', handleResize);
 
-    // Initial start
-    // Don't call findNext automatically, wait for user to click "Connect" in intro
-
     return () => {
       window.removeEventListener('resize', handleResize);
       newSocket.disconnect();
@@ -135,6 +140,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       setIsConnected(true);
       setRoomId(rId);
       setIsAdminConnected(!!isPartnerAdmin);
+      playJoinSound();
       partnerIdRef.current = partnerId;
       partnerUidRef.current = partnerUid;
       partnerEmailRef.current = partnerEmail;
@@ -160,13 +166,15 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
     });
 
     socket.on('partner-skipped', () => {
+      playDisconnectSound();
       handleDisconnect('Partner skipped');
-      setTimeout(() => findNext(), 1500); // Add delay to prevent race conditions
+      setTimeout(() => findNext(), 1500);
     });
 
     socket.on('partner-disconnected', () => {
+      playDisconnectSound();
       handleDisconnect('Partner disconnected');
-      setTimeout(() => findNext(), 1500); // Add delay to prevent race conditions
+      setTimeout(() => findNext(), 1500);
     });
 
     socket.on('reaction', (data) => {
@@ -224,6 +232,90 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
       localVideoRef.current.srcObject = localStream;
     }
   }, [localStream]);
+
+  // --- Sound helpers ---
+  const playJoinSound = () => {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(520, ctx.currentTime);
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch {}
+  };
+
+  const playDisconnectSound = () => {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(300, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch {}
+  };
+
+  // --- Face detection using canvas pixel analysis ---
+  const checkFacePresence = useCallback(() => {
+    if (mode !== 'video') return;
+    const video = localVideoRef.current;
+    const canvas = faceCanvasRef.current;
+    if (!video || !canvas || !localStream) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 80;
+    canvas.height = 60;
+    ctx.drawImage(video, 0, 0, 80, 60);
+
+    const data = ctx.getImageData(20, 10, 40, 40).data;
+    let skinPixels = 0;
+    const total = (40 * 40);
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      if (r > 60 && g > 40 && b > 20 && r > g && r > b &&
+          (r - g) > 10 && r < 250) {
+        skinPixels++;
+      }
+    }
+
+    const ratio = skinPixels / total;
+    if (ratio < 0.04) {
+      noFaceCountRef.current++;
+      if (noFaceCountRef.current >= 3) {
+        setFaceDetectionWarning(true);
+        if (isConnected || isSearching) {
+          handleDisconnect('No face detected');
+          setIsSearching(false);
+          if (socket) socket.emit('next');
+        }
+      }
+    } else {
+      noFaceCountRef.current = 0;
+      setFaceDetectionWarning(false);
+    }
+  }, [mode, localStream, isConnected, isSearching, socket]);
+
+  useEffect(() => {
+    if (mode !== 'video' || !localStream) return;
+    faceCheckIntervalRef.current = setInterval(checkFacePresence, 3000);
+    return () => {
+      if (faceCheckIntervalRef.current) clearInterval(faceCheckIntervalRef.current);
+    };
+  }, [mode, localStream, checkFacePresence]);
 
   const handleDisconnect = (reason: string) => {
     setIsConnected(false);
@@ -287,14 +379,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
   };
   findNextRef.current = findNext;
 
-  // Reset unread count when chat is opened
   useEffect(() => {
     if (showChat) {
       setUnreadCount(0);
     }
   }, [showChat]);
 
-  // Handle new messages
   const handleNewMessage = () => {
     if (!showChat && mode === 'video') {
       setUnreadCount(prev => prev + 1);
@@ -360,6 +450,75 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-neutral-950 text-white overflow-hidden font-sans selection:bg-emerald-500/30">
+      {/* Hidden canvas for face detection */}
+      <canvas ref={faceCanvasRef} className="hidden" />
+
+      {/* 18+ Age Consent Modal */}
+      <AnimatePresence>
+        {showAgeConsent && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-neutral-950/95 backdrop-blur-2xl flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="max-w-md w-full bg-neutral-900 border border-red-500/30 rounded-[40px] p-10 shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-red-500" />
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <AlertTriangle className="w-7 h-7 text-red-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black uppercase tracking-tighter">Age Verification</h2>
+                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Adults Only — 18+</p>
+                </div>
+              </div>
+              <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-5 mb-8 space-y-3">
+                <p className="text-sm text-neutral-300 leading-relaxed">
+                  This platform is strictly for users aged <span className="font-black text-red-400">18 years or older</span>.
+                </p>
+                <p className="text-xs text-neutral-500 leading-relaxed">
+                  By continuing, you confirm that you are at least 18 years old and agree to our Terms of Service. You may encounter adult language and content. Minors are strictly prohibited.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => { setShowAgeConsent(false); setShowIntro(true); }}
+                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20"
+                >
+                  I am 18 or older — Continue
+                </button>
+                <button
+                  onClick={onExit}
+                  className="w-full py-4 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 rounded-2xl font-black text-sm uppercase tracking-widest transition-all"
+                >
+                  I am under 18 — Exit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Face Detection Warning */}
+      <AnimatePresence>
+        {faceDetectionWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -40 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[90] bg-red-500 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2 text-sm font-black uppercase tracking-widest"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            No face detected — session paused
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Intro Overlay */}
       <AnimatePresence>
         {showIntro && (
@@ -539,16 +698,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
         {/* Video Section */}
         {mode === 'video' ? (
           <div className="flex-1 relative flex flex-col items-center justify-center p-2 sm:p-4 md:p-8 min-h-0">
-            {/* Main Video Container Margin */}
-            <div 
-              className="relative w-full h-full bg-neutral-900 overflow-hidden"
-            >
-              
-              {/* Background Grid for Empty State */}
+            <div className="relative w-full h-full bg-neutral-900 overflow-hidden">
               <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
                    style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
 
-              {/* Remote Video */}
               <video
                 ref={remoteVideoRef}
                 autoPlay
@@ -556,7 +709,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 className={`w-full h-full object-contain ${!isConnected ? 'hidden' : ''}`}
               />
 
-              {/* Admin Connection Notification */}
               <AnimatePresence>
                 {isAdminConnected && (
                   <motion.div
@@ -603,10 +755,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               )}
             </div>
 
-            {/* Detached Local Video (PiP) - Fixed in Top Left */}
-            <div 
-              className="fixed top-20 left-4 w-20 sm:w-24 md:w-32 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50"
-            >
+            <div className="fixed top-20 left-4 w-20 sm:w-24 md:w-32 aspect-square bg-neutral-950 rounded-xl overflow-hidden border-2 border-neutral-800 z-50">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -619,12 +768,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                   <VideoOff className="w-6 h-6 sm:w-10 sm:h-10 text-neutral-700" />
                 </div>
               )}
-              
-              {/* Technical Overlay for Local Video */}
               <div className="absolute inset-0 pointer-events-none border-2 border-emerald-500/20 rounded-xl" />
             </div>
 
-              {/* Reaction Overlay */}
               <AnimatePresence>
                 {reaction && (
                   <motion.div
@@ -642,7 +788,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
                 )}
               </AnimatePresence>
 
-            {/* Detached Report Button */}
             {isConnected && (
               <button
                 onClick={() => setShowReportModal(true)}
@@ -652,14 +797,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
               </button>
             )}
 
-
-              {/* Corner Accents */}
               <div className="absolute top-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-l-2 border-emerald-500/30 rounded-tl-2xl sm:rounded-tl-[40px] pointer-events-none" />
               <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-t-2 border-r-2 border-emerald-500/30 rounded-tr-2xl sm:rounded-tr-[40px] pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-l-2 border-emerald-500/30 rounded-bl-2xl sm:rounded-bl-[40px] pointer-events-none" />
               <div className="absolute bottom-0 right-0 w-8 h-8 sm:w-12 sm:h-12 border-b-2 border-r-2 border-emerald-500/30 rounded-br-2xl sm:rounded-br-[40px] pointer-events-none" />
 
-              {/* Controls Bar - Hardware Style */}
             <div className="mt-4 sm:mt-6 md:mt-10 flex items-center gap-2 sm:gap-4 md:gap-6 z-30 mb-4 shrink-0">
               <button
                 onClick={handleNext}
@@ -745,7 +887,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode }) => {
           </div>
         )}
         
-        {/* Chat Section - Technical Sidebar */}
+        {/* Chat Section */}
         <div className={`
           flex flex-col
           ${mode === 'video' ? 'w-full lg:w-[450px] h-[45vh] lg:h-full border-t lg:border-t-0 lg:border-l absolute lg:relative bottom-0 left-0 right-0 z-40' : (isConnected ? 'w-full h-full flex-1' : 'hidden')}

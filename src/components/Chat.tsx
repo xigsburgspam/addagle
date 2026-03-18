@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Terminal, Cpu } from 'lucide-react';
+import { Send, Reply, X, Check, CheckCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useLanguage } from '../LanguageContext';
+
+const CHAR_LIMIT = 200;
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+type MessageStatus = 'sending' | 'delivered' | 'seen';
 
 interface Message {
   id: string;
   sender: string;
   text: string;
   timestamp: number;
+  status: MessageStatus;
+  replyTo?: { id: string; text: string; sender: string } | null;
+  reaction?: string | null;
 }
 
 interface ChatProps {
@@ -18,34 +25,14 @@ interface ChatProps {
 }
 
 export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNewMessage }) => {
-  const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleMessage = (message: Message) => {
-      setMessages(prev => [...prev, message]);
-      if (onNewMessage) onNewMessage();
-    };
-
-    const handleTypingStart = () => setIsPartnerTyping(true);
-    const handleTypingStop = () => setIsPartnerTyping(false);
-
-    socket.on('chat-message', handleMessage);
-    socket.on('typing-start', handleTypingStart);
-    socket.on('typing-stop', handleTypingStop);
-
-    return () => {
-      socket.off('chat-message', handleMessage);
-      socket.off('typing-start', handleTypingStart);
-      socket.off('typing-stop', handleTypingStop);
-    };
-  }, [socket]);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -53,135 +40,293 @@ export const Chat: React.FC<ChatProps> = ({ socket, roomId, currentUserId, onNew
     }
   }, [messages, isPartnerTyping]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputText(e.target.value);
-    
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleMessage = (message: Message) => {
+      setMessages(prev => [...prev, { ...message, status: 'delivered' }]);
+      socket.emit('message-seen', { roomId, messageId: message.id });
+      if (onNewMessage) onNewMessage();
+    };
+
+    const handleTypingStart = () => setIsPartnerTyping(true);
+    const handleTypingStop = () => setIsPartnerTyping(false);
+
+    const handleDelivered = ({ messageId }: { messageId: string }) => {
+      setMessages(prev => prev.map(m =>
+        m.id === messageId && m.status === 'sending' ? { ...m, status: 'delivered' } : m
+      ));
+    };
+
+    const handleSeen = ({ messageId }: { messageId: string }) => {
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? { ...m, status: 'seen' } : m
+      ));
+    };
+
+    const handleReaction = ({ messageId, emoji }: { messageId: string; emoji: string }) => {
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? { ...m, reaction: emoji } : m
+      ));
+    };
+
+    socket.on('chat-message', handleMessage);
+    socket.on('typing-start', handleTypingStart);
+    socket.on('typing-stop', handleTypingStop);
+    socket.on('message-delivered', handleDelivered);
+    socket.on('message-seen', handleSeen);
+    socket.on('message-reaction', handleReaction);
+
+    return () => {
+      socket.off('chat-message', handleMessage);
+      socket.off('typing-start', handleTypingStart);
+      socket.off('typing-stop', handleTypingStop);
+      socket.off('message-delivered', handleDelivered);
+      socket.off('message-seen', handleSeen);
+      socket.off('message-reaction', handleReaction);
+    };
+  }, [socket, roomId]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    if (val.length > CHAR_LIMIT) return;
+    setInputText(val);
     if (socket) {
       socket.emit('typing-start', { roomId });
-      
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      
       typingTimeoutRef.current = setTimeout(() => {
         socket.emit('typing-stop', { roomId });
       }, 2000);
     }
   };
 
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || !socket) return;
+  const sendMessage = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = inputText.trim();
+    if (!trimmed || !socket || trimmed.length > CHAR_LIMIT) return;
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     socket.emit('typing-stop', { roomId });
 
-    // Word limit check
-    const words = inputText.trim().split(/\s+/);
-    if (words.length > 100) {
-      alert(t.chatLimit);
-      return;
-    }
-
     const newMessage: Message = {
       id: Math.random().toString(36).substr(2, 9),
       sender: currentUserId,
-      text: inputText.trim(),
+      text: trimmed,
       timestamp: Date.now(),
+      status: 'sending',
+      replyTo: replyingTo ? { id: replyingTo.id, text: replyingTo.text, sender: replyingTo.sender } : null,
+      reaction: null,
     };
 
     socket.emit('send-chat-message', { roomId, message: newMessage });
+    socket.emit('message-delivered', { roomId, messageId: newMessage.id });
     setMessages(prev => [...prev, newMessage]);
     setInputText('');
+    setReplyingTo(null);
+    if (inputRef.current) inputRef.current.style.height = 'auto';
   };
 
+  const sendReaction = (messageId: string, emoji: string) => {
+    socket.emit('message-reaction', { roomId, messageId, emoji });
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reaction: emoji } : m));
+    setReactionPickerFor(null);
+  };
+
+  const StatusIcon = ({ status }: { status: MessageStatus }) => {
+    if (status === 'sending') return <Check className="w-3 h-3 text-neutral-600" />;
+    if (status === 'delivered') return <CheckCheck className="w-3 h-3 text-neutral-400" />;
+    return <CheckCheck className="w-3 h-3 text-emerald-400" />;
+  };
+
+  const charsLeft = CHAR_LIMIT - inputText.length;
+  const isNearLimit = charsLeft <= 30;
+
   return (
-    <div className="flex flex-col h-full bg-neutral-950/50 backdrop-blur-xl border-l border-neutral-900 w-full overflow-hidden">
-      {/* Messages Area */}
-      <div 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 scrollbar-thin scrollbar-thumb-neutral-800"
-      >
+    <div
+      className="flex flex-col h-full bg-neutral-950/50 backdrop-blur-xl w-full overflow-hidden"
+      onClick={() => setReactionPickerFor(null)}
+    >
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 scrollbar-thin scrollbar-thumb-neutral-800">
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
-            <motion.div 
-              key={msg.id}
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className={`flex flex-col ${msg.sender === currentUserId ? 'items-end' : 'items-start'}`}
-            >
-              <div className="flex items-center gap-2 mb-1 px-1">
-                <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 ">
-                  {msg.sender === currentUserId ? 'Local Node' : 'Remote Node'}
-                </span>
-                <span className="text-[6px] sm:text-[8px] font-mono text-neutral-700">
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-              </div>
-              
-              <div className={`max-w-[90%] px-3 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-medium leading-relaxed border break-words ${
-                msg.sender === currentUserId 
-                  ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 border-emerald-500/20 rounded-tr-none' 
-                  : 'bg-gradient-to-br from-neutral-900/80 to-neutral-900/40 text-neutral-300 border-neutral-800 rounded-tl-none'
-              }`}>
-                {msg.text}
-              </div>
-            </motion.div>
-          ))}
+          {messages.map((msg) => {
+            const isMine = msg.sender === currentUserId;
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.15 }}
+                className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group`}
+              >
+                {/* Reply preview above bubble */}
+                {msg.replyTo && (
+                  <div className="mb-0.5 max-w-[85%] px-3 py-1.5 rounded-xl text-[10px] border-l-2 border-emerald-500 bg-neutral-800/60 text-neutral-400 truncate">
+                    <span className="font-bold text-emerald-400 mr-1">
+                      {msg.replyTo.sender === currentUserId ? 'You' : 'Stranger'}:
+                    </span>
+                    {msg.replyTo.text}
+                  </div>
+                )}
+
+                <div className="relative flex items-end gap-1.5">
+                  {/* Left action buttons (for partner messages) */}
+                  {!isMine && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity mb-1 order-first">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id); }}
+                        className="p-1 bg-neutral-800 hover:bg-neutral-700 rounded-full text-xs leading-none"
+                      >😊</button>
+                      <button
+                        onClick={() => { setReplyingTo(msg); inputRef.current?.focus(); }}
+                        className="p-1 bg-neutral-800 hover:bg-neutral-700 rounded-full"
+                      ><Reply className="w-3 h-3 text-neutral-400" /></button>
+                    </div>
+                  )}
+
+                  {/* Message bubble */}
+                  <div className={`relative max-w-[82%] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed break-words ${
+                    isMine
+                      ? 'bg-emerald-600 text-white rounded-br-sm'
+                      : 'bg-neutral-800 text-neutral-100 rounded-bl-sm'
+                  }`}>
+                    {msg.text}
+                    <div className={`flex items-center gap-1 mt-0.5 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <span className="text-[9px] opacity-50">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {isMine && <StatusIcon status={msg.status} />}
+                    </div>
+                    {msg.reaction && (
+                      <span className="absolute -bottom-3.5 right-1 text-sm bg-neutral-900 border border-neutral-700 rounded-full px-1 py-0.5 shadow leading-none">
+                        {msg.reaction}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right action buttons (for own messages) */}
+                  {isMine && (
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity mb-1">
+                      <button
+                        onClick={() => { setReplyingTo(msg); inputRef.current?.focus(); }}
+                        className="p-1 bg-neutral-800 hover:bg-neutral-700 rounded-full"
+                      ><Reply className="w-3 h-3 text-neutral-400" /></button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id); }}
+                        className="p-1 bg-neutral-800 hover:bg-neutral-700 rounded-full text-xs leading-none"
+                      >😊</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Reaction picker */}
+                <AnimatePresence>
+                  {reactionPickerFor === msg.id && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8, y: 4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={e => e.stopPropagation()}
+                      className="flex gap-1.5 mt-1.5 bg-neutral-800 border border-neutral-700 rounded-full px-3 py-1.5 shadow-xl z-50"
+                    >
+                      {REACTIONS.map(emoji => (
+                        <button key={emoji} onClick={() => sendReaction(msg.id, emoji)}
+                          className="text-base hover:scale-125 transition-transform">{emoji}</button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
-        
+
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-neutral-700 opacity-30 p-4 text-center">
-            <Cpu className="w-8 h-8 sm:w-12 sm:h-12 mb-4" />
-            <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.4em]">Secure Channel Established</p>
+          <div className="h-full flex flex-col items-center justify-center text-neutral-700 opacity-30 p-4 text-center pt-16">
+            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.4em]">Secure Channel Established</p>
           </div>
         )}
       </div>
 
-      {/* Input Area */}
-      <form onSubmit={sendMessage} className="p-4 sm:p-6 bg-neutral-950 border-t border-neutral-900">
+      {/* Input */}
+      <div className="p-3 sm:p-4 bg-neutral-950 border-t border-neutral-900 shrink-0">
+        {/* Typing indicator */}
         {isPartnerTyping && (
-          <div className="text-[8px] sm:text-[10px] font-mono text-emerald-500/60 mb-2 animate-pulse">
-            Typing...
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="flex gap-0.5">
+              {[0, 1, 2].map(i => (
+                <motion.div key={i}
+                  animate={{ y: [0, -3, 0] }}
+                  transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                  className="w-1.5 h-1.5 bg-emerald-500 rounded-full"
+                />
+              ))}
+            </div>
+            <span className="text-[9px] text-neutral-500 font-medium">Stranger is typing…</span>
           </div>
         )}
+
+        {/* Reply bar */}
+        <AnimatePresence>
+          {replyingTo && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex items-center justify-between bg-neutral-800/60 border-l-2 border-emerald-500 rounded-lg px-3 py-1.5 mb-2 text-[10px]"
+            >
+              <div className="overflow-hidden mr-2">
+                <span className="font-bold text-emerald-400 mr-1">
+                  {replyingTo.sender === currentUserId ? 'You' : 'Stranger'}:
+                </span>
+                <span className="text-neutral-400 truncate">{replyingTo.text}</span>
+              </div>
+              <button onClick={() => setReplyingTo(null)} className="text-neutral-500 hover:text-white shrink-0">
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 to-transparent rounded-xl sm:rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-          <div className="relative flex items-end gap-2 sm:gap-3 bg-neutral-900 border border-neutral-800 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 focus-within:border-emerald-500/50 transition-colors">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500/20 to-transparent rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
+          <div className="relative flex items-end gap-2 bg-neutral-900 border border-neutral-800 rounded-xl p-1.5 focus-within:border-emerald-500/50 transition-colors">
             <textarea
+              ref={inputRef}
               value={inputText}
               onChange={(e) => {
-                handleInputChange(e as any);
+                handleInputChange(e);
                 e.target.style.height = 'auto';
                 e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  sendMessage(e as any);
-                  e.currentTarget.style.height = 'auto';
+                  sendMessage();
+                  if (e.currentTarget) e.currentTarget.style.height = 'auto';
                 }
               }}
-              placeholder="Transmit..."
-              className="flex-1 bg-transparent text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium focus:outline-none placeholder:text-neutral-700 resize-none overflow-y-auto"
+              placeholder="Message…"
+              className="flex-1 bg-transparent text-white px-3 py-1.5 text-xs sm:text-sm font-medium focus:outline-none placeholder:text-neutral-600 resize-none overflow-y-auto"
               rows={1}
               style={{ maxHeight: '100px' }}
             />
             <button
-              type="submit"
+              onClick={() => sendMessage()}
               disabled={!inputText.trim()}
-              className="p-2 sm:p-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-black rounded-lg sm:rounded-xl hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-20 disabled:hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/10 self-end"
+              className="p-2 sm:p-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-20 transition-all self-end"
             >
               <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
-        <div className="mt-3 sm:mt-4 flex items-center justify-between px-1 sm:px-2">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 ">Encryption Active</span>
-          </div>
-          <span className="text-[6px] sm:text-[8px] font-mono text-neutral-800 uppercase">Buffer: 0.0kb</span>
+
+        <div className="mt-1 flex justify-end px-1">
+          <span className={`text-[9px] font-mono ${isNearLimit ? (charsLeft <= 10 ? 'text-red-400' : 'text-yellow-500') : 'text-neutral-700'}`}>
+            {charsLeft}/{CHAR_LIMIT}
+          </span>
         </div>
-      </form>
+      </div>
     </div>
   );
 };
