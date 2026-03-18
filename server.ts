@@ -231,8 +231,13 @@ async function startServer() {
     });
 
     // Join matchmaking queue
-    socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
-      console.log('User joined queue:', socket.id, 'Mode:', mode, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
+    socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode, district, name }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text', district: string, name: string }) => {
+      console.log(`Join queue request: ${socket.id}, mode: ${mode}, name: ${name}, district: ${district}, peerId: ${peerId}, UID: ${uid}, Admin: ${isAdmin}`);
+      
+      if (!peerId) {
+        console.error(`Join queue failed: No peerId for socket ${socket.id}`);
+        return;
+      }
 
       // Store UID and Email on socket for reporting
       (socket as any)._uid = uid;
@@ -303,6 +308,12 @@ async function startServer() {
         ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
         // Notify both users
+        socket.emit('match-found', { roomId, partnerPeerId: partner.peerId, partnerName: partner.name });
+        io.sockets.sockets.get(partner.socketId)?.emit('match-found', { roomId, partnerPeerId: peerId, partnerName: name });
+      } else {
+        // No partner found, add to queue
+        queue.push({ socketId: socket.id, peerId, uid, email, isAdmin, name });
+      }
         io.to(socket.id).emit('matched', {
           partnerId: partner.socketId,
           partnerPeerId: partner.peerId,
