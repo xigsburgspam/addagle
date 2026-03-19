@@ -176,7 +176,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
       setInputText('');
       return;
     }
-    
     const messageId = Math.random().toString(36).slice(2);
     socket.emit('custom-chat', { id: messageId, text: trimmed, replyTo });
     addEntry({ id: messageId, type: 'msg', name: roomData.userName, text: trimmed, ts: Date.now(), replyTo });
@@ -189,7 +188,7 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
     e.preventDefault();
     if (!reportUser || !reportReason || !socket || !user) return;
 
-    // Find the reported user's uid from roomState
+    // Find the reported user's uid and email from roomState
     const reportedUserObj = roomState?.users?.find((u: any) => u.name === reportUser);
     const reportedUid = reportedUserObj?.uid || null;
     const reportedEmail = reportedUserObj?.email || null;
@@ -200,9 +199,10 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
         reporterId: user.uid,
         reporterEmail: user.email,
         reporterName: roomData.userName,
-        violatorUid: reportedUid,
-        violatorEmail: reportedEmail,
-        violatorName: reportUser,
+        reportedId: reportedUid,       // required by Firestore security rule
+        violatorUid: reportedUid,      // read by AdminPanel for block button
+        violatorEmail: reportedEmail,  // displayed in AdminPanel
+        violatorName: reportUser,      // fallback display name
         reason: reportReason,
         timestamp: Timestamp.now(),
         roomId: `custom:${roomData.roomName || 'global'}`,
@@ -285,14 +285,12 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                   {entry.name !== roomData.userName && (
                     <span className="text-[10px] font-bold text-neutral-500 ml-1 mb-0.5">{entry.name}</span>
                   )}
-                  
                   {entry.replyTo && (
                     <div className={`mb-1 px-3 py-1.5 rounded-xl text-[11px] text-neutral-400 italic max-w-full truncate border-l-[3px] border-emerald-500 ${entry.name === roomData.userName ? 'bg-black/20' : 'bg-black/25'}`}>
                       <span className="font-bold text-emerald-500 not-italic mr-1">{entry.replyTo.name}:</span>
                       {entry.replyTo.text}
                     </div>
                   )}
-
                   <div className="relative flex items-center gap-2 group">
                     {entry.name === roomData.userName && (
                       <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1 transition-opacity">
@@ -301,7 +299,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                         </button>
                       </div>
                     )}
-
                     <div className={`px-3.5 py-2 rounded-2xl text-[13.5px] leading-relaxed relative shadow-md ${
                       entry.name === roomData.userName
                         ? 'bg-[#2b5c3f] text-white rounded-tr-sm shadow-emerald-950/50'
@@ -309,7 +306,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                     }`}>
                       {entry.text}
                     </div>
-
                     {entry.name !== roomData.userName && (
                       <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                         <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
