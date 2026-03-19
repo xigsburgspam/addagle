@@ -14,6 +14,8 @@ service cloud.firestore {
     //   - photoURL: string
     //   - role: string (admin/user)
     //   - isBlocked: boolean
+    //   - videoCount: integer
+    //   - lastVideoDate: string
     //   - savedDisplayName: string
     //   - hasSavedName: boolean
     //   - createdAt: timestamp
@@ -67,6 +69,8 @@ service cloud.firestore {
              data.email is string &&
              data.role in ['admin', 'user'] &&
              (!('isBlocked' in data) || data.isBlocked is bool) &&
+             (!('videoCount' in data) || data.videoCount is int) &&
+             (!('lastVideoDate' in data) || data.lastVideoDate is string) &&
              (!('savedDisplayName' in data) || data.savedDisplayName is string || data.savedDisplayName == null) &&
              (!('hasSavedName' in data) || data.hasSavedName is bool);
     }

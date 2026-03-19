@@ -4,9 +4,10 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, getDoc, doc, setDoc, addDoc, increment } from 'firebase/firestore';
-import admin from 'firebase-admin';
+import { initializeApp as initializeClientApp } from 'firebase/app';
+import { getFirestore as getClientFirestore, collection, getDocs, getDoc, doc, setDoc, addDoc, increment } from 'firebase/firestore';
+import { initializeApp as initializeAdminApp, getApps as getAdminApps } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore';
 import { readFileSync } from 'fs';
 
 // Load firebase config — resolve relative to source root, works in both dev and prod
@@ -14,17 +15,20 @@ const configPath = new URL('./firebase-applet-config.json', import.meta.url);
 const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
 
 // Initialize Firebase Client SDK (for some client-side like logic if needed, but mostly for config)
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const app = initializeClientApp(firebaseConfig);
+const db = getClientFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Firebase Admin SDK for server-side operations (bypasses rules)
-if (!admin.apps.length) {
-  admin.initializeApp({
+let adminApp;
+if (!getAdminApps().length) {
+  adminApp = initializeAdminApp({
     projectId: firebaseConfig.projectId,
   });
+} else {
+  adminApp = getAdminApps()[0];
 }
 // Use the named database if provided, otherwise default
-const adminDb = admin.firestore(firebaseConfig.firestoreDatabaseId || '(default)');
+const adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId || '(default)');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -204,7 +208,7 @@ async function startServer() {
 
     // Increment total text chats
     totalTextChats++;
-    adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
   };
 
   // Timer interval for custom rooms
@@ -294,13 +298,33 @@ async function startServer() {
                 const partnerIsAdmin = (partnerSocket as any)._isAdmin;
                 
                 if (!myIsAdmin) {
-                  const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                  const today = new Date().toISOString().split('T')[0];
+                  let stats = userVideoChatStats.get(myUid);
+                  if (!stats || stats.lastDate !== today) {
+                    const userDoc = await adminDb.collection('users').doc(myUid).get();
+                    const userData = userDoc.data();
+                    if (userData && userData.lastVideoDate === today) {
+                      stats = { count: userData.videoCount || 0, lastDate: today };
+                    } else {
+                      stats = { count: 0, lastDate: today };
+                    }
+                  }
                   stats.count++;
                   userVideoChatStats.set(myUid, stats);
                   adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
                 }
                 if (!partnerIsAdmin && partnerUid) {
-                  const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                  const today = new Date().toISOString().split('T')[0];
+                  let stats = userVideoChatStats.get(partnerUid);
+                  if (!stats || stats.lastDate !== today) {
+                    const userDoc = await adminDb.collection('users').doc(partnerUid).get();
+                    const userData = userDoc.data();
+                    if (userData && userData.lastVideoDate === today) {
+                      stats = { count: userData.videoCount || 0, lastDate: today };
+                    } else {
+                      stats = { count: 0, lastDate: today };
+                    }
+                  }
                   stats.count++;
                   userVideoChatStats.set(partnerUid, stats);
                   adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
@@ -388,7 +412,18 @@ async function startServer() {
             // Handle count if >= 40s (which it is)
                 if (isVideo) {
                   if (!isAdmin) {
-                    const stats = userVideoChatStats.get(uid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                    const today = new Date().toISOString().split('T')[0];
+                    let stats = userVideoChatStats.get(uid);
+                    if (!stats || stats.lastDate !== today) {
+                      // Fetch from DB if not in memory or date changed
+                      const userDoc = await adminDb.collection('users').doc(uid).get();
+                      const userData = userDoc.data();
+                      if (userData && userData.lastVideoDate === today) {
+                        stats = { count: userData.videoCount || 0, lastDate: today };
+                      } else {
+                        stats = { count: 0, lastDate: today };
+                      }
+                    }
                     stats.count++;
                     userVideoChatStats.set(uid, stats);
                     adminDb.collection('users').doc(uid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
@@ -396,7 +431,17 @@ async function startServer() {
                   if (partnerSocket && !(partnerSocket as any)._isAdmin) {
                     const partnerUid = (partnerSocket as any)._uid;
                     if (partnerUid) {
-                      const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                      const today = new Date().toISOString().split('T')[0];
+                      let stats = userVideoChatStats.get(partnerUid);
+                      if (!stats || stats.lastDate !== today) {
+                        const userDoc = await adminDb.collection('users').doc(partnerUid).get();
+                        const userData = userDoc.data();
+                        if (userData && userData.lastVideoDate === today) {
+                          stats = { count: userData.videoCount || 0, lastDate: today };
+                        } else {
+                          stats = { count: 0, lastDate: today };
+                        }
+                      }
                       stats.count++;
                       userVideoChatStats.set(partnerUid, stats);
                       adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
@@ -415,8 +460,8 @@ async function startServer() {
         // Persist to Firestore using Admin SDK
         adminDb.collection('stats').doc('global').set(
           isVideo
-            ? { totalVideoChats: admin.firestore.FieldValue.increment(1) }
-            : { totalTextChats: admin.firestore.FieldValue.increment(1) },
+            ? { totalVideoChats: FieldValue.increment(1) }
+            : { totalTextChats: FieldValue.increment(1) },
           { merge: true }
         ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
@@ -513,7 +558,7 @@ async function startServer() {
     });
 
     // Next/Skip
-    socket.on('next', () => {
+    socket.on('next', async () => {
       const partnerId = activeMatches.get(socket.id);
       if (partnerId) {
         const roomId = (socket as any)._roomId;
@@ -529,13 +574,33 @@ async function startServer() {
               const partnerIsAdmin = partnerSocket ? (partnerSocket as any)._isAdmin : false;
 
               if (myUid && !myIsAdmin) {
-                const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                const today = new Date().toISOString().split('T')[0];
+                let stats = userVideoChatStats.get(myUid);
+                if (!stats || stats.lastDate !== today) {
+                  const userDoc = await adminDb.collection('users').doc(myUid).get();
+                  const userData = userDoc.data();
+                  if (userData && userData.lastVideoDate === today) {
+                    stats = { count: userData.videoCount || 0, lastDate: today };
+                  } else {
+                    stats = { count: 0, lastDate: today };
+                  }
+                }
                 stats.count++;
                 userVideoChatStats.set(myUid, stats);
                 adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
               }
               if (partnerUid && !partnerIsAdmin) {
-                const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                const today = new Date().toISOString().split('T')[0];
+                let stats = userVideoChatStats.get(partnerUid);
+                if (!stats || stats.lastDate !== today) {
+                  const userDoc = await adminDb.collection('users').doc(partnerUid).get();
+                  const userData = userDoc.data();
+                  if (userData && userData.lastVideoDate === today) {
+                    stats = { count: userData.videoCount || 0, lastDate: today };
+                  } else {
+                    stats = { count: 0, lastDate: today };
+                  }
+                }
                 stats.count++;
                 userVideoChatStats.set(partnerUid, stats);
                 adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
@@ -609,7 +674,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('football-message', ({ matchId, text }: { matchId: string; text: string }) => {
@@ -656,7 +721,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-create', ({ roomName, maxMembers, mode, district, name, uid, email }) => {
@@ -690,7 +755,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-join', ({ roomName, name, uid, email }) => {
@@ -724,7 +789,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-join-district', ({ district, name, uid, email }) => {
@@ -805,7 +870,7 @@ async function startServer() {
     });
 
     // Disconnect
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       console.log('User disconnected:', socket.id);
       if (waitingVideoUser?.socketId === socket.id) waitingVideoUser = null;
       if (waitingTextUser?.socketId === socket.id) waitingTextUser = null;
@@ -848,13 +913,33 @@ async function startServer() {
               const partnerIsAdmin = partnerSocket ? (partnerSocket as any)._isAdmin : false;
 
               if (myUid && !myIsAdmin) {
-                const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                const today = new Date().toISOString().split('T')[0];
+                let stats = userVideoChatStats.get(myUid);
+                if (!stats || stats.lastDate !== today) {
+                  const userDoc = await adminDb.collection('users').doc(myUid).get();
+                  const userData = userDoc.data();
+                  if (userData && userData.lastVideoDate === today) {
+                    stats = { count: userData.videoCount || 0, lastDate: today };
+                  } else {
+                    stats = { count: 0, lastDate: today };
+                  }
+                }
                 stats.count++;
                 userVideoChatStats.set(myUid, stats);
                 adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
               }
               if (partnerUid && !partnerIsAdmin) {
-                const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                const today = new Date().toISOString().split('T')[0];
+                let stats = userVideoChatStats.get(partnerUid);
+                if (!stats || stats.lastDate !== today) {
+                  const userDoc = await adminDb.collection('users').doc(partnerUid).get();
+                  const userData = userDoc.data();
+                  if (userData && userData.lastVideoDate === today) {
+                    stats = { count: userData.videoCount || 0, lastDate: today };
+                  } else {
+                    stats = { count: 0, lastDate: today };
+                  }
+                }
                 stats.count++;
                 userVideoChatStats.set(partnerUid, stats);
                 adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});

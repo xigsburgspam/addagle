@@ -2,9 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc } from '../firebase';
-import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff, Users, Search, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
+
+interface User {
+  id: string;
+  uid: string;
+  email: string;
+  displayName?: string;
+  role: string;
+  isBlocked: boolean;
+  videoCount?: number;
+  lastVideoDate?: string;
+}
 
 interface Report {
   id: string;
@@ -48,12 +59,14 @@ export const AdminPanel: React.FC = () => {
   const [reports,      setReports]      = useState<Report[]>([]);
   const [blockedEmails,setBlockedEmails]= useState<BlockedEmail[]>([]);
   const [activeRooms,  setActiveRooms]  = useState<ActiveRoom[]>([]);
+  const [users,        setUsers]        = useState<User[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches'>('reports');
+  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users'>('reports');
   const [matches,      setMatches]      = useState<FootballMatch[]>([]);
   const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '' });
   const [addingMatch,  setAddingMatch]  = useState(false);
   const [matchMsg,     setMatchMsg]     = useState('');
+  const [userSearch,   setUserSearch]   = useState('');
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -72,6 +85,18 @@ export const AdminPanel: React.FC = () => {
       data.sort((a, b) => (b.blockedAt?.toMillis?.() || 0) - (a.blockedAt?.toMillis?.() || 0));
       setBlockedEmails(data);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'blocked_emails'));
+
+    const qUsers = query(collection(db, 'users'));
+    const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      setUsers(data);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
+
+    const qUsers = query(collection(db, 'users'));
+    const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      setUsers(data);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
     const fetchRooms = async () => {
       try {
@@ -93,6 +118,7 @@ export const AdminPanel: React.FC = () => {
       unsubscribeReports();
       unsubscribeBlocked();
       unsubscribeMatches();
+      unsubscribeUsers();
       clearInterval(roomInterval);
     };
   }, [isAdmin]);
@@ -167,6 +193,36 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const resetUserVideoCount = async (userId: string) => {
+    if (!confirm('Reset video count for this user?')) return;
+    try {
+      await updateDoc(doc(db, 'users', userId), { videoCount: 0 });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
+  const filteredUsers = users.filter(u => 
+    u.email?.toLowerCase().includes(userSearch.toLowerCase()) || 
+    u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+    u.uid?.toLowerCase().includes(userSearch.toLowerCase())
+  );
+
+  const resetUserVideoCount = async (userId: string) => {
+    if (!confirm('Reset video count for this user?')) return;
+    try {
+      await updateDoc(doc(db, 'users', userId), { videoCount: 0 });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
+  const filteredUsers = users.filter(u => 
+    u.email?.toLowerCase().includes(userSearch.toLowerCase()) || 
+    u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+    u.uid?.toLowerCase().includes(userSearch.toLowerCase())
+  );
+
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6">
@@ -240,6 +296,34 @@ export const AdminPanel: React.FC = () => {
             {reports.length > 0 && (
               <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'reports' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
                 {reports.length}
+              </span>
+            )}
+          </button>
+
+          {/* Users tab */}
+          <button onClick={() => setActiveTab('users')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'users' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
+            <div className="flex items-center gap-4">
+              <Users className="w-5 h-5" />
+              <span className="font-black uppercase tracking-tighter">Users</span>
+            </div>
+            {users.length > 0 && (
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'users' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
+                {users.length}
+              </span>
+            )}
+          </button>
+
+          {/* Users tab */}
+          <button onClick={() => setActiveTab('users')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'users' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
+            <div className="flex items-center gap-4">
+              <Users className="w-5 h-5" />
+              <span className="font-black uppercase tracking-tighter">Users</span>
+            </div>
+            {users.length > 0 && (
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'users' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
+                {users.length}
               </span>
             )}
           </button>
@@ -348,6 +432,172 @@ export const AdminPanel: React.FC = () => {
                 )}
               </motion.div>
 
+            ) : activeTab === 'users' ? (
+              <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-4xl font-black tracking-tighter uppercase">User Management</h2>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                    <input 
+                      value={userSearch}
+                      onChange={e => setUserSearch(e.target.value)}
+                      placeholder="Search users..."
+                      className="pl-12 pr-6 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition-all w-64"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4">
+                  {filteredUsers.map(user => (
+                    <div key={user.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/20 transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-6">
+                          <div className="w-14 h-14 bg-neutral-950 rounded-2xl flex items-center justify-center border border-neutral-800">
+                            <Users className="w-6 h-6 text-neutral-600" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <p className="text-xl font-black text-white">{user.displayName || 'Anonymous'}</p>
+                              <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${user.role === 'admin' ? 'bg-emerald-500 text-black' : 'bg-neutral-800 text-neutral-500'}`}>
+                                {user.role}
+                              </span>
+                              {user.isBlocked && (
+                                <span className="text-[8px] font-black px-2 py-0.5 rounded uppercase bg-red-500 text-white">
+                                  Blocked
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-mono text-neutral-500 mt-1">{user.email} • {user.uid}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-8">
+                          <div className="text-right">
+                            <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Video Calls Today</p>
+                            <div className="flex items-center gap-3 justify-end">
+                              <span className={`text-lg font-mono ${user.videoCount && user.videoCount >= 7 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {user.videoCount || 0}/7
+                              </span>
+                              <button 
+                                onClick={() => resetUserVideoCount(user.id)}
+                                className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-500 hover:text-emerald-500 transition-all"
+                                title="Reset Count"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <p className="text-[8px] font-mono text-neutral-600 mt-1 uppercase tracking-widest">
+                              Last: {user.lastVideoDate || 'Never'}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            {!user.isBlocked ? (
+                              <button onClick={() => blockUser(user.id, user.email)}
+                                className="p-4 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-2xl transition-all">
+                                <UserX className="w-5 h-5" />
+                              </button>
+                            ) : (
+                              <button onClick={() => unblockEmail(user.email, user.id)}
+                                className="p-4 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-2xl transition-all">
+                                <Shield className="w-5 h-5" />
+                              </button>
+                            ) }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {filteredUsers.length === 0 && (
+                  <div className="py-40 text-center">
+                    <Users className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
+                    <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Users Found</p>
+                  </div>
+                )}
+              </motion.div>
+            ) : activeTab === 'users' ? (
+              <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-4xl font-black tracking-tighter uppercase">User Management</h2>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                    <input 
+                      value={userSearch}
+                      onChange={e => setUserSearch(e.target.value)}
+                      placeholder="Search users..."
+                      className="pl-12 pr-6 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition-all w-64"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4">
+                  {filteredUsers.map(user => (
+                    <div key={user.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/20 transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-6">
+                          <div className="w-14 h-14 bg-neutral-950 rounded-2xl flex items-center justify-center border border-neutral-800">
+                            <Users className="w-6 h-6 text-neutral-600" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <p className="text-xl font-black text-white">{user.displayName || 'Anonymous'}</p>
+                              <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${user.role === 'admin' ? 'bg-emerald-500 text-black' : 'bg-neutral-800 text-neutral-500'}`}>
+                                {user.role}
+                              </span>
+                              {user.isBlocked && (
+                                <span className="text-[8px] font-black px-2 py-0.5 rounded uppercase bg-red-500 text-white">
+                                  Blocked
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-mono text-neutral-500 mt-1">{user.email} • {user.uid}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-8">
+                          <div className="text-right">
+                            <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Video Calls Today</p>
+                            <div className="flex items-center gap-3 justify-end">
+                              <span className={`text-lg font-mono ${user.videoCount && user.videoCount >= 7 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {user.videoCount || 0}/7
+                              </span>
+                              <button 
+                                onClick={() => resetUserVideoCount(user.id)}
+                                className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-500 hover:text-emerald-500 transition-all"
+                                title="Reset Count"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <p className="text-[8px] font-mono text-neutral-600 mt-1 uppercase tracking-widest">
+                              Last: {user.lastVideoDate || 'Never'}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            {!user.isBlocked ? (
+                              <button onClick={() => blockUser(user.id, user.email)}
+                                className="p-4 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-2xl transition-all">
+                                <UserX className="w-5 h-5" />
+                              </button>
+                            ) : (
+                              <button onClick={() => unblockEmail(user.email, user.id)}
+                                className="p-4 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-2xl transition-all">
+                                <Shield className="w-5 h-5" />
+                              </button>
+                            ) }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {filteredUsers.length === 0 && (
+                  <div className="py-40 text-center">
+                    <Users className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
+                    <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Users Found</p>
+                  </div>
+                )}
+              </motion.div>
             ) : activeTab === 'blocked' ? (
               <motion.div key="blocked" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
                 <div className="flex items-center justify-between mb-12">

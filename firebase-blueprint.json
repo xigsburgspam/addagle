@@ -11,6 +11,8 @@
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "user"] },
         "isBlocked": { "type": "boolean" },
+        "videoCount": { "type": "integer" },
+        "lastVideoDate": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]

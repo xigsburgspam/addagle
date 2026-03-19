@@ -11,6 +11,8 @@ interface UserData {
   role: 'admin' | 'user';
   isBlocked: boolean;
   isEmailBlocked?: boolean;
+  videoCount?: number;
+  lastVideoDate?: string;
   savedDisplayName?: string;
   hasSavedName?: boolean;
 }

@@ -21,6 +21,7 @@ interface VideoChatProps {
 
 export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) => {
   const { user, userData } = useFirebase();
+  const isAdmin = user?.email === 'edublitz71@gmail.com';
   const { t } = useLanguage();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -260,6 +261,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       setIsAdminConnected(false);
     });
 
+    socket.on('limit-reached', () => {
+      setIsSearching(false);
+      setConnectionError('Daily video chat limit reached (7/7). Try again tomorrow!');
+      setTimeout(() => onExit(), 5000);
+    });
+
     return () => {
       socket.off('matched');
       socket.off('partner-skipped');
@@ -404,6 +411,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     if (!socket) return;
     if (mode === 'video' && !videoEnabled) return;
 
+    // Client-side limit check
+    if (mode === 'video' && !isAdmin && (userData?.videoCount || 0) >= 7) {
+      setConnectionError('Daily video chat limit reached (7/7). Try again tomorrow!');
+      setTimeout(() => onExit(), 5000);
+      return;
+    }
+
     if (mode === 'video') {
       let stream = localStreamRef.current;
       if (!stream) {
@@ -428,7 +442,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     }
 
     setIsSearching(true);
-    const isAdmin = user?.email === 'edublitz71@gmail.com';
     if (peerRef.current?.id) {
       socket.emit('join-queue', {
         peerId: peerRef.current.id,
@@ -513,8 +526,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       setShowReportModal(false);
       
       // Check if reported user is admin
-      const isAdmin = partnerEmailRef.current === 'edublitz71@gmail.com';
-      if (!isAdmin) {
+      const isPartnerAdmin = partnerEmailRef.current === 'edublitz71@gmail.com';
+      if (!isPartnerAdmin) {
         setShowBlockConfirm(true);
       } else {
         alert(t.reportSuccess);
@@ -808,6 +821,31 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
           <div className="h-6 sm:h-8 w-px bg-neutral-900 mx-1 sm:mx-2" />
 
           <StatsDisplay mode={mode} />
+
+          {mode === 'video' && !isAdmin && (
+            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black text-emerald-500/60 uppercase tracking-widest leading-none mb-1">Daily Limit</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex gap-0.5">
+                    {[...Array(7)].map((_, i) => (
+                      <div 
+                        key={i} 
+                        className={`w-1.5 h-3 rounded-full transition-all duration-500 ${
+                          i < (userData?.videoCount || 0) 
+                            ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' 
+                            : 'bg-emerald-500/20'
+                        }`} 
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[10px] font-black text-white ml-1">
+                    {7 - (userData?.videoCount || 0)} <span className="text-emerald-500/40">Left</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
