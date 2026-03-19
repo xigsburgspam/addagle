@@ -6,7 +6,7 @@ import Peer, { MediaConnection } from 'peerjs';
 import Draggable from 'react-draggable';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, addDoc, Timestamp, doc, setDoc, increment } from '../firebase';
+import { db, collection, addDoc, Timestamp, doc, setDoc, increment, updateDoc } from '../firebase';
 import { Chat } from './Chat';
 import { StatsDisplay } from './StatsDisplay';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -61,6 +61,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const [sessionTimer, setSessionTimer] = useState<number>(mode === 'video' ? 300 : 420); // 5 or 7 minutes in seconds
   const sessionTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Daily minutes usage tracking
+  const dailyUsageIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const dailyLimitReachedRef = useRef(false);
+  const usageMinutes = userData?.dailyVideoUsage ?? 0;
+  const limitMinutes = userData?.dailyVideoLimit ?? 20;
+  const remainingMinutes = Math.max(0, limitMinutes - usageMinutes);
+
   useEffect(() => {
     if (isConnected) {
       const initialTime = mode === 'video' ? 300 : 420;
@@ -83,6 +90,39 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current);
     };
   }, [isConnected, mode]);
+
+  // Track daily video usage: increment by 1 minute every 60s while connected
+  useEffect(() => {
+    if (mode !== 'video' || isAdmin || !isConnected || !user) return;
+    dailyLimitReachedRef.current = false;
+
+    dailyUsageIntervalRef.current = setInterval(async () => {
+      const today = new Date().toISOString().split('T')[0];
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        // Reset usage if it's a new day
+        if (userData?.lastVideoDate !== today) {
+          await updateDoc(userRef, { dailyVideoUsage: 1, lastVideoDate: today });
+        } else {
+          const newUsage = (userData?.dailyVideoUsage ?? 0) + 1;
+          await updateDoc(userRef, { dailyVideoUsage: newUsage });
+          const limit = userData?.dailyVideoLimit ?? 20;
+          if (newUsage >= limit && !dailyLimitReachedRef.current) {
+            dailyLimitReachedRef.current = true;
+            clearInterval(dailyUsageIntervalRef.current!);
+            setConnectionError(`Daily video chat limit reached (${limit} min). Try again tomorrow!`);
+            setTimeout(() => onExit(), 4000);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to update daily usage', e);
+      }
+    }, 60000);
+
+    return () => {
+      if (dailyUsageIntervalRef.current) clearInterval(dailyUsageIntervalRef.current);
+    };
+  }, [isConnected, mode, isAdmin, user]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -263,7 +303,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
     socket.on('limit-reached', () => {
       setIsSearching(false);
-      setConnectionError('Daily video chat limit reached (7/7). Try again tomorrow!');
+      const lim = userData?.dailyVideoLimit ?? 20;
+      setConnectionError(`Daily video chat limit reached (${lim} min). Try again tomorrow!`);
       setTimeout(() => onExit(), 5000);
     });
 
@@ -411,9 +452,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     if (!socket) return;
     if (mode === 'video' && !videoEnabled) return;
 
-    // Client-side limit check
-    if (mode === 'video' && !isAdmin && (userData?.videoCount || 0) >= 7) {
-      setConnectionError('Daily video chat limit reached (7/7). Try again tomorrow!');
+    // Client-side daily minutes limit check
+    const usageMinutes = userData?.dailyVideoUsage ?? 0;
+    const limitMinutes = userData?.dailyVideoLimit ?? 20;
+    if (mode === 'video' && !isAdmin && usageMinutes >= limitMinutes) {
+      setConnectionError(`Daily video chat limit reached (${limitMinutes} min). Try again tomorrow!`);
       setTimeout(() => onExit(), 5000);
       return;
     }
@@ -827,20 +870,17 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
               <div className="flex flex-col">
                 <span className="text-[8px] font-black text-emerald-500/60 uppercase tracking-widest leading-none mb-1">Daily Limit</span>
                 <div className="flex items-center gap-1.5">
-                  <div className="flex gap-0.5">
-                    {[...Array(7)].map((_, i) => (
-                      <div 
-                        key={i} 
-                        className={`w-1.5 h-3 rounded-full transition-all duration-500 ${
-                          i < (userData?.videoCount || 0) 
-                            ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]' 
-                            : 'bg-emerald-500/20'
-                        }`} 
-                      />
-                    ))}
+                  <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.round((usageMinutes / limitMinutes) * 100))}%`,
+                        background: remainingMinutes <= 5 ? '#ef4444' : remainingMinutes <= 10 ? '#f59e0b' : '#10b981'
+                      }}
+                    />
                   </div>
                   <span className="text-[10px] font-black text-white ml-1">
-                    {7 - (userData?.videoCount || 0)} <span className="text-emerald-500/40">Left</span>
+                    {remainingMinutes} <span className="text-emerald-500/40">min left</span>
                   </span>
                 </div>
               </div>

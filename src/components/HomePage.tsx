@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X } from 'lucide-react';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 import { AccountSection } from './AccountSection';
@@ -106,7 +106,7 @@ export const HomePage: React.FC<{
   onWatchFootball: (name: string) => void;
   onCustomChat: (name: string) => void;
 }> = ({ onStart, onWatchFootball, onCustomChat }) => {
-  const { user, userData, loading, updateDisplayName, removeDisplayName } = useFirebase();
+  const { user, userData, loading, updateDisplayName } = useFirebase();
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -183,13 +183,14 @@ export const HomePage: React.FC<{
   };
 
   const handleAction = async (type: 'video' | 'text' | 'football' | 'custom') => {
-    if (type === 'video') {
-       const res = await fetch(`/api/user/stats?uid=${user?.uid}`);
-       const data = await res.json();
-       if (data.remaining <= 0) {
-         alert('You have reached your daily video chat limit.');
-         return;
-       }
+    if (type === 'video' && !userData?.role?.includes('admin')) {
+      const today = new Date().toISOString().split('T')[0];
+      const usage = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
+      const limit = userData?.dailyVideoLimit ?? 20;
+      if (usage >= limit) {
+        alert(`You have reached your daily video chat limit (${limit} min). Try again tomorrow!`);
+        return;
+      }
     }
     if (userData?.hasSavedName && userData?.savedDisplayName) {
       executeAction(type, userData.savedDisplayName);
@@ -351,34 +352,20 @@ export const HomePage: React.FC<{
               )}
             </div>
 
-            {user && userData?.hasSavedName && (
+            {user && !userData?.isBlocked && (
               <div className="mt-6 flex flex-col items-center gap-3">
-                <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">
-                  Signed in as <span className="text-emerald-500">{userData.savedDisplayName}</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowNamePrompt(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
-                  >
-                    <UserCheck className="w-3 h-3" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Change Name</span>
-                  </button>
-                  <button
-                    onClick={() => setShowAccount(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
-                  >
-                    <UserCheck className="w-3 h-3" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Account</span>
-                  </button>
-                  <button
-                    onClick={() => removeDisplayName()}
-                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-red-400 transition-all group"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Remove Name</span>
-                  </button>
-                </div>
+                {userData?.hasSavedName && (
+                  <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">
+                    Signed in as <span className="text-emerald-500">{userData.savedDisplayName}</span>
+                  </p>
+                )}
+                <button
+                  onClick={() => setShowAccount(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
+                >
+                  <UserCheck className="w-3 h-3" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Account</span>
+                </button>
               </div>
             )}
 

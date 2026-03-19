@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { db, doc, getDoc, updateDoc, deleteDoc } from '../firebase';
 import {
-  X, User, Mail, Shield, Video, Ban, Edit2, Check, LogOut
+  X, User, Mail, Shield, Video, Ban, Edit2, Check
 } from 'lucide-react';
-import { auth, signOut } from '../firebase';
 
 interface BlockedUser {
   uid: string;
@@ -85,11 +84,6 @@ export const AccountSection: React.FC<AccountSectionProps> = ({ onClose }) => {
     await removeDisplayName();
     setNameInput('');
     setEditingName(false);
-  };
-
-  const handleSignOut = async () => {
-    await signOut(auth);
-    onClose();
   };
 
   const displayedName = userData?.savedDisplayName || userData?.displayName || user?.displayName || 'Anonymous';
@@ -286,15 +280,6 @@ export const AccountSection: React.FC<AccountSectionProps> = ({ onClose }) => {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 pb-6">
-          <button onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-semibold transition-all"
-            style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-            <LogOut size={15} />
-            Sign Out
-          </button>
-        </div>
       </div>
     </div>
   );
