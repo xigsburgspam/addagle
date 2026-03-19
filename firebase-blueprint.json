@@ -15,7 +15,7 @@
         "lastVideoDate": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "role"]
+      "required": ["uid", "email", "role", "videoCount", "lastVideoDate"]
     },
     "Report": {
       "title": "Report",

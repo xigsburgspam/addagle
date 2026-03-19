@@ -187,14 +187,6 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const resetUserVideoCount = async (userId: string) => {
-    if (!confirm('Reset video count for this user?')) return;
-    try {
-      await updateDoc(doc(db, 'users', userId), { videoCount: 0 });
-    } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
-    }
-  };
 
   const filteredUsers = users.filter(u => 
     u.email?.toLowerCase().includes(userSearch.toLowerCase()) || 
@@ -400,7 +392,12 @@ export const AdminPanel: React.FC = () => {
             ) : activeTab === 'users' ? (
               <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
                 <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase">User Management</h2>
+                  <div>
+                    <h2 className="text-4xl font-black tracking-tighter uppercase">User Management</h2>
+                    <p className="text-[10px] font-mono text-neutral-500 mt-2 uppercase tracking-widest">
+                      Showing {filteredUsers.length} out of {users.length} total users
+                    </p>
+                  </div>
                   <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
                     <input 
@@ -437,19 +434,7 @@ export const AdminPanel: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-8">
                           <div className="text-right">
-                            <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Video Calls Today</p>
-                            <div className="flex items-center gap-3 justify-end">
-                              <span className={`text-lg font-mono ${user.videoCount && user.videoCount >= 7 ? 'text-red-500' : 'text-emerald-500'}`}>
-                                {user.videoCount || 0}/7
-                              </span>
-                              <button 
-                                onClick={() => resetUserVideoCount(user.id)}
-                                className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-500 hover:text-emerald-500 transition-all"
-                                title="Reset Count"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
-                            </div>
+
                             <p className="text-[8px] font-mono text-neutral-600 mt-1 uppercase tracking-widest">
                               Last: {user.lastVideoDate || 'Never'}
                             </p>
