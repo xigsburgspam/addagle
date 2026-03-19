@@ -529,7 +529,7 @@ async function startServer() {
       joinOrCreateDistrictRoom(socket, { district, name, uid, email });
     });
 
-    socket.on('custom-chat', ({ text, replyTo }) => {
+    socket.on('custom-chat', ({ id, text, replyTo }) => {
       if (containsBanned(text)) return;
       const roomId = (socket as any)._customRoom;
       const name = (socket as any)._customName;
@@ -543,7 +543,7 @@ async function startServer() {
         return;
       }
 
-      socket.to(`custom:${roomId}`).emit('custom-chat', { name, text, ts: Date.now(), replyTo });
+      socket.to(`custom:${roomId}`).emit('custom-chat', { id, name, text, ts: Date.now(), replyTo });
     });
 
     socket.on('custom-react', ({ messageId, emoji }) => {

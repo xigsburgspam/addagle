@@ -102,8 +102,8 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
       setRoomState(data);
     });
 
-    sock.on('custom-chat', ({ name, text, ts, replyTo }) => {
-      addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name, text, ts, replyTo });
+    sock.on('custom-chat', ({ id, name, text, ts, replyTo }) => {
+      addEntry({ id: id || Math.random().toString(36).slice(2), type: 'msg', name, text, ts, replyTo });
     });
 
     sock.on('custom-react', ({ messageId, emoji, name }) => {
@@ -170,8 +170,9 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
       return;
     }
     
-    socket.emit('custom-chat', { text: trimmed, replyTo });
-    addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name: roomData.userName, text: trimmed, ts: Date.now(), replyTo });
+    const messageId = Math.random().toString(36).slice(2);
+    socket.emit('custom-chat', { id: messageId, text: trimmed, replyTo });
+    addEntry({ id: messageId, type: 'msg', name: roomData.userName, text: trimmed, ts: Date.now(), replyTo });
     setInputText('');
     setInputError('');
     setReplyTo(null);
