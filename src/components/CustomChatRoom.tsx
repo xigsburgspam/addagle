@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { ArrowLeft, Send, Users, ShieldAlert, Clock, AlertCircle, Reply, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFirebase } from '../FirebaseContext';
-import { db, doc, updateDoc, runTransaction } from '../firebase';
+import { db, doc, updateDoc, runTransaction, collection, addDoc, Timestamp } from '../firebase';
 import { getDistrict } from '../utils/location';
 import { containsBanned } from '../constants';
 
@@ -185,10 +185,36 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
     setReplyTo(null);
   }, [inputText, socket, roomData.userName, replyTo]);
 
-  const handleReport = (e: React.FormEvent) => {
+  const handleReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reportUser || !reportReason || !socket) return;
+    if (!reportUser || !reportReason || !socket || !user) return;
+
+    // Find the reported user's uid from roomState
+    const reportedUserObj = roomState?.users?.find((u: any) => u.name === reportUser);
+    const reportedUid = reportedUserObj?.uid || null;
+    const reportedEmail = reportedUserObj?.email || null;
+
+    // Write to Firestore so it appears in the admin panel
+    try {
+      await addDoc(collection(db, 'reports'), {
+        reporterId: user.uid,
+        reporterEmail: user.email,
+        reporterName: roomData.userName,
+        reportedId: reportedUid,
+        reportedEmail: reportedEmail,
+        reportedName: reportUser,
+        reason: reportReason,
+        timestamp: Timestamp.now(),
+        roomId: `custom:${roomData.roomName || 'global'}`,
+        source: 'custom-chat',
+      });
+    } catch (e) {
+      console.error('Failed to save report to Firestore:', e);
+    }
+
+    // Also notify the server
     socket.emit('custom-report', { violatorName: reportUser, reason: reportReason });
+
     setReportStatus('Report submitted.');
     setTimeout(() => {
       setShowReport(false);
