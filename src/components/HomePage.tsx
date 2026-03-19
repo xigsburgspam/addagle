@@ -19,23 +19,6 @@ const BANGLADESH_DISTRICTS = [
   "Sherpur", "Jamalpur", "Netrokona", "Mymensingh"
 ];
 
-// Approximate relative positions (0-100) for the SVG map
-const DISTRICT_POSITIONS: Record<string, { x: number; y: number }> = {
-  "Panchagarh": { x: 25, y: 5 }, "Thakurgaon": { x: 20, y: 10 }, "Nilphamari": { x: 35, y: 10 }, "Lalmonirhat": { x: 45, y: 12 }, "Kurigram": { x: 55, y: 15 },
-  "Dinajpur": { x: 28, y: 18 }, "Rangpur": { x: 40, y: 18 }, "Gaibandha": { x: 50, y: 22 }, "Joypurhat": { x: 35, y: 28 }, "Naogaon": { x: 25, y: 32 },
-  "Bogra": { x: 45, y: 32 }, "Chapai Nawabganj": { x: 10, y: 40 }, "Rajshahi": { x: 22, y: 45 }, "Natore": { x: 35, y: 45 }, "Sirajganj": { x: 48, y: 42 },
-  "Pabna": { x: 38, y: 55 }, "Kushtia": { x: 25, y: 58 }, "Meherpur": { x: 15, y: 62 }, "Chuadanga": { x: 18, y: 68 }, "Jhenaidah": { x: 28, y: 68 },
-  "Magura": { x: 35, y: 72 }, "Rajbari": { x: 45, y: 65 }, "Faridpur": { x: 50, y: 72 }, "Manikganj": { x: 55, y: 62 }, "Tangail": { x: 58, y: 48 },
-  "Jamalpur": { x: 58, y: 35 }, "Sherpur": { x: 65, y: 28 }, "Mymensingh": { x: 70, y: 35 }, "Netrokona": { x: 80, y: 32 }, "Kishoreganj": { x: 82, y: 45 },
-  "Sunamganj": { x: 90, y: 25 }, "Sylhet": { x: 95, y: 35 }, "Moulvibazar": { x: 92, y: 45 }, "Habiganj": { x: 88, y: 52 }, "Brahmanbaria": { x: 80, y: 58 },
-  "Narsingdi": { x: 72, y: 62 }, "Gazipur": { x: 65, y: 58 }, "Dhaka": { x: 65, y: 68 }, "Narayanganj": { x: 72, y: 72 }, "Munshiganj": { x: 68, y: 78 },
-  "Shariatpur": { x: 75, y: 82 }, "Madaripur": { x: 62, y: 82 }, "Gopalganj": { x: 55, y: 85 }, "Narail": { x: 42, y: 78 }, "Jessore": { x: 30, y: 78 },
-  "Satkhira": { x: 28, y: 90 }, "Khulna": { x: 38, y: 88 }, "Bagerhat": { x: 48, y: 92 }, "Pirojpur": { x: 55, y: 92 }, "Jhalokati": { x: 60, y: 90 },
-  "Barisal": { x: 68, y: 88 }, "Bhola": { x: 78, y: 92 }, "Lakshmipur": { x: 85, y: 85 }, "Chandpur": { x: 80, y: 78 }, "Comilla": { x: 88, y: 68 },
-  "Feni": { x: 92, y: 78 }, "Noakhali": { x: 88, y: 88 }, "Patuakhali": { x: 72, y: 95 }, "Barguna": { x: 65, y: 98 }, "Chittagong": { x: 95, y: 88 },
-  "Khagrachhari": { x: 98, y: 65 }, "Rangamati": { x: 99, y: 75 }, "Bandarban": { x: 98, y: 95 }, "Cox's Bazar": { x: 95, y: 99 }
-};
-
 const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => void; onClose: () => void }> = ({ onConfirm, onClose }) => {
   const [name, setName] = useState('');
   const [save, setSave] = useState(false);
@@ -111,73 +94,6 @@ const DisplayNamePrompt: React.FC<{ onConfirm: (name: string, save: boolean) => 
   );
 };
 
-const BangladeshMap: React.FC<{ districtUsers: Record<string, number> }> = ({ districtUsers }) => {
-  const [hoveredDistrict, setHoveredDistrict] = useState<string | null>(null);
-
-  return (
-    <div className="w-full aspect-[4/5] max-h-[600px] rounded-[40px] overflow-hidden border border-neutral-800 bg-neutral-900/50 relative p-8 flex items-center justify-center">
-      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-2xl">
-        {/* More accurate Bangladesh Outline */}
-        <path
-          d="M30,5 L40,2 L55,5 L65,10 L75,15 L85,20 L95,25 L98,40 L95,60 L98,75 L95,85 L88,95 L80,98 L70,95 L60,98 L50,95 L40,98 L30,95 L20,98 L10,90 L5,80 L2,65 L5,50 L2,35 L10,20 L20,10 Z"
-          fill="rgba(16, 185, 129, 0.03)"
-          stroke="rgba(16, 185, 129, 0.2)"
-          strokeWidth="0.3"
-        />
-        
-        {/* District points */}
-        {Object.entries(DISTRICT_POSITIONS).map(([name, pos]) => {
-          const count = districtUsers[name] || 0;
-          const isActive = count > 0;
-          
-          return (
-            <g 
-              key={name} 
-              onMouseEnter={() => setHoveredDistrict(name)}
-              onMouseLeave={() => setHoveredDistrict(null)}
-              className="cursor-pointer"
-            >
-              {/* Pulse effect for active districts */}
-              {isActive && (
-                <circle cx={pos.x} cy={pos.y} r="1.5" fill="#10b981" className="animate-ping opacity-20" />
-              )}
-              
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={isActive ? "0.8" : "0.4"}
-                fill={isActive ? "#10b981" : "#404040"}
-                className="transition-all duration-300"
-              />
-
-              {hoveredDistrict === name && (
-                <foreignObject x={pos.x + 2} y={pos.y - 5} width="40" height="10">
-                  <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded px-2 py-1 text-[4px] font-black text-white whitespace-nowrap">
-                    {name}: {count}
-                  </div>
-                </foreignObject>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      
-      <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-400">Active Districts</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-neutral-700" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Inactive</span>
-          </div>
-        </div>
-        <span className="text-[10px] font-black uppercase tracking-tighter text-neutral-700">64 Districts Illustrated</span>
-      </div>
-    </div>
-  );
-};
 
 export const HomePage: React.FC<{
   onStart: (mode: 'video' | 'text', name: string) => void;
@@ -469,9 +385,6 @@ export const HomePage: React.FC<{
               </div>
             </div>
 
-            {/* Map Section */}
-            <div className="mt-20 w-full">
-            </div>
           </motion.div>
         </div>
       </main>

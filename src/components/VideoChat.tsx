@@ -53,8 +53,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const [unreadCount, setUnreadCount] = useState(0);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [isMirrored, setIsMirrored] = useState(false);
-  const [currentFilter, setCurrentFilter] = useState('none');
   const [currentDeviceId, setCurrentDeviceId] = useState<string | undefined>(undefined);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
 

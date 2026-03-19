@@ -38,23 +38,45 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
   const handleDistrictJoin = async () => {
     setLoadingLocation(true);
     setError('');
+
+    const fallbackToIP = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        const district = data.city || data.region || data.country_name || 'Unknown';
+        setLoadingLocation(false);
+        onCreateRoom(userName.trim(), '', 15, 'district', district);
+      } catch (err) {
+        setLoadingLocation(false);
+        setError('Failed to identify district.');
+      }
+    };
+
+    if (!navigator.geolocation) {
+      fallbackToIP();
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`, {
+            headers: {
+              'User-Agent': 'BlinkMeet/1.0'
+            }
+          });
           const data = await res.json();
           const district = data.address.state_district || data.address.county || data.address.city || data.address.state || 'Unknown';
           setLoadingLocation(false);
           onCreateRoom(userName.trim(), '', 15, 'district', district);
         } catch (err) {
-          setLoadingLocation(false);
-          setError('Failed to identify district.');
+          fallbackToIP();
         }
       },
       () => {
-        setLoadingLocation(false);
-        setError('Location access denied.');
-      }
+        fallbackToIP();
+      },
+      { timeout: 10000 }
     );
   };
 
@@ -73,29 +95,46 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
 
     if (mode === 'district') {
       setLoadingLocation(true);
-      try {
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            try {
-              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
-              const data = await res.json();
-              const district = data.address.state_district || data.address.county || data.address.city || data.address.state || 'Unknown';
-              setLoadingLocation(false);
-              onCreateRoom(userName.trim(), '', maxMembers, 'district', district);
-            } catch (err) {
-              setLoadingLocation(false);
-              setError('Failed to identify district from location.');
-            }
-          },
-          () => {
-            setLoadingLocation(false);
-            setError('Location access denied. Cannot use district mode.');
-          }
-        );
-      } catch (err) {
-        setLoadingLocation(false);
-        setError('Geolocation is not supported by your browser.');
+      
+      const fallbackToIP = async () => {
+        try {
+          const res = await fetch('https://ipapi.co/json/');
+          const data = await res.json();
+          const district = data.region || data.city || 'Unknown';
+          setLoadingLocation(false);
+          onCreateRoom(userName.trim(), '', maxMembers, 'district', district);
+        } catch (err) {
+          setLoadingLocation(false);
+          setError('Failed to identify district from location.');
+        }
+      };
+
+      if (!navigator.geolocation) {
+        fallbackToIP();
+        return;
       }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`, {
+              headers: {
+                'User-Agent': 'BD-Omegle-Clone/1.0'
+              }
+            });
+            const data = await res.json();
+            const district = data.address?.state_district || data.address?.county || data.address?.city || data.address?.state || 'Unknown';
+            setLoadingLocation(false);
+            onCreateRoom(userName.trim(), '', maxMembers, 'district', district);
+          } catch (err) {
+            fallbackToIP();
+          }
+        },
+        () => {
+          fallbackToIP();
+        },
+        { timeout: 10000 }
+      );
     } else {
       onCreateRoom(userName.trim(), roomName.trim(), maxMembers, 'friends');
     }

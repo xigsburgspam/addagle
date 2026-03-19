@@ -73,7 +73,7 @@ export const translations = {
     anonymousChat: 'Anonymous Chat',
     anonymousChatDesc: 'Text-only anonymous chat. No history, no logs, pure anonymity.',
     locationPolicy: 'Location Policy',
-    locationPolicyDesc: 'We use your geographical location to connect you with people in your district and to show user distribution on our live map. Your precise coordinates are never stored or shared.'
+    locationPolicyDesc: 'We use your geographical location to connect you with people in your district. Your precise coordinates are never stored or shared.'
   },
   bn: {
     appName: 'গুপ্ত',

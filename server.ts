@@ -99,7 +99,7 @@ async function startServer() {
       const data = doc.data();
       reportedPairs.add(`${data.reporterId}:${data.reportedId}`);
     });
-  });
+  }).catch(e => console.error('Failed to load reports:', e.message));
 
   let totalVideoChats = 0;
   let totalTextChats = 0;

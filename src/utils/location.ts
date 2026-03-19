@@ -13,13 +13,18 @@ export async function getDistrict(): Promise<string> {
           const district = data.address.state_district || data.address.county || data.address.city || data.address.state || 'Unknown';
           resolve(district);
         } catch (err) {
-          reject(err);
+          console.error('Reverse geocoding failed:', err);
+          reject(new Error('Failed to identify district from coordinates.'));
         }
       },
       (err) => {
-        reject(err);
+        console.error('Geolocation error:', err);
+        let message = 'Location access denied.';
+        if (err.code === err.TIMEOUT) message = 'Location request timed out.';
+        if (err.code === err.POSITION_UNAVAILABLE) message = 'Location information is unavailable.';
+        reject(new Error(message));
       },
-      { timeout: 10000 }
+      { timeout: 10000, enableHighAccuracy: false }
     );
   });
 }
