@@ -64,6 +64,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   // Daily minutes usage tracking
   const dailyUsageIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dailyLimitReachedRef = useRef(false);
+  // Use refs so interval always reads latest values, not stale closure
+  const usageMinutesRef = useRef(userData?.dailyVideoUsage ?? 0);
+  const limitMinutesRef = useRef(userData?.dailyVideoLimit ?? 20);
+  useEffect(() => { usageMinutesRef.current = userData?.dailyVideoUsage ?? 0; }, [userData?.dailyVideoUsage]);
+  useEffect(() => { limitMinutesRef.current = userData?.dailyVideoLimit ?? 20; }, [userData?.dailyVideoLimit]);
   const usageMinutes = userData?.dailyVideoUsage ?? 0;
   const limitMinutes = userData?.dailyVideoLimit ?? 20;
   const remainingMinutes = Math.max(0, limitMinutes - usageMinutes);
@@ -100,19 +105,28 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       const today = new Date().toISOString().split('T')[0];
       try {
         const userRef = doc(db, 'users', user.uid);
-        // Reset usage if it's a new day
-        if (userData?.lastVideoDate !== today) {
+        const currentUsage = usageMinutesRef.current;
+        const currentLimit = limitMinutesRef.current;
+        const currentLastDate = userData?.lastVideoDate;
+
+        let newUsage: number;
+        if (currentLastDate !== today) {
+          // New day — reset usage
+          newUsage = 1;
           await updateDoc(userRef, { dailyVideoUsage: 1, lastVideoDate: today });
         } else {
-          const newUsage = (userData?.dailyVideoUsage ?? 0) + 1;
+          newUsage = currentUsage + 1;
           await updateDoc(userRef, { dailyVideoUsage: newUsage });
-          const limit = userData?.dailyVideoLimit ?? 20;
-          if (newUsage >= limit && !dailyLimitReachedRef.current) {
-            dailyLimitReachedRef.current = true;
-            clearInterval(dailyUsageIntervalRef.current!);
-            setConnectionError(`Daily video chat limit reached (${limit} min). Try again tomorrow!`);
-            setTimeout(() => onExit(), 4000);
-          }
+        }
+
+        // Update our ref immediately so next tick is accurate
+        usageMinutesRef.current = newUsage;
+
+        if (newUsage >= currentLimit && !dailyLimitReachedRef.current) {
+          dailyLimitReachedRef.current = true;
+          clearInterval(dailyUsageIntervalRef.current!);
+          setConnectionError(`Daily video chat limit reached (${currentLimit} min). Try again tomorrow!`);
+          setTimeout(() => onExit(), 4000);
         }
       } catch (e) {
         console.error('Failed to update daily usage', e);
@@ -221,9 +235,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     peer.on('call', (call) => {
       console.log('Receiving call');
       call.answer(localStreamRef.current || undefined);
+      currentCallRef.current = call;
       call.on('stream', (remoteStream) => {
         setRemoteStream(remoteStream);
         setIsConnected(true);
+      });
+      call.on('close', () => {
+        handleDisconnect('Call closed');
+      });
+      call.on('error', () => {
+        handleDisconnect('Call error');
       });
     });
 
@@ -248,7 +269,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
     socket.on('matched', async ({ partnerId, partnerPeerId, partnerUid, partnerEmail, isPartnerAdmin, initiator, roomId: rId }) => {
       setIsSearching(false);
-      setIsConnected(true);
       setRoomId(rId);
       setIsAdminConnected(!!isPartnerAdmin);
       playJoinSound();
@@ -267,11 +287,25 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         }
       }
 
+      // For text mode, connected immediately since no stream needed
+      if (mode === 'text') {
+        setIsConnected(true);
+      }
+
       if (initiator && localStreamRef.current) {
         const call = peerRef.current?.call(partnerPeerId, localStreamRef.current);
         if (call) {
           currentCallRef.current = call;
-          call.on('stream', (remoteStream) => setRemoteStream(remoteStream));
+          call.on('stream', (remoteStream) => {
+            setRemoteStream(remoteStream);
+            setIsConnected(true);
+          });
+          call.on('close', () => {
+            handleDisconnect('Call closed');
+          });
+          call.on('error', () => {
+            handleDisconnect('Call error');
+          });
         }
       }
     });
@@ -279,13 +313,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     socket.on('partner-skipped', () => {
       playDisconnectSound();
       handleDisconnect('Partner skipped');
-      setTimeout(() => findNext(), 1500);
+      setTimeout(() => findNextRef.current(), 1500);
     });
 
     socket.on('partner-disconnected', () => {
       playDisconnectSound();
       handleDisconnect('Partner disconnected');
-      setTimeout(() => findNext(), 1500);
+      setTimeout(() => findNextRef.current(), 1500);
     });
 
     socket.on('reaction', (data) => {
@@ -315,6 +349,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       socket.off('reaction');
       socket.off('admin-connected');
       socket.off('admin-disconnected-from-room');
+      socket.off('limit-reached');
     };
   }, [socket]);
 
@@ -440,6 +475,10 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     setRemoteStream(null);
     setRoomId(null);
     setIsAdminConnected(false);
+    // Clear remote video to avoid frozen frame (Bug 4)
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
     if (currentCallRef.current) {
       currentCallRef.current.close();
       currentCallRef.current = null;
