@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Users, Globe, Plus, LogIn, MapPin, Loader2, ChevronDown } from 'lucide-react';
-import { containsBanned, BANGLADESH_DISTRICTS } from '../constants';
-import { getDistrict } from '../utils/location';
+import { X, Users, Globe, Plus, LogIn, MapPin, Loader2 } from 'lucide-react';
+import { containsBanned } from '../constants';
 
 interface CustomChatLobbyProps {
   onClose: () => void;
@@ -19,7 +18,6 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
   const [maxMembers, setMaxMembers] = useState(2);
   const [mode, setMode] = useState<'friends' | 'district'>('friends');
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [showDistrictSelect, setShowDistrictSelect] = useState(false);
   const [error, setError] = useState('');
 
   const handleNameSubmit = (e: React.FormEvent) => {
@@ -40,19 +38,24 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
   const handleDistrictJoin = async () => {
     setLoadingLocation(true);
     setError('');
-    try {
-      const district = await getDistrict();
-      setLoadingLocation(false);
-      onCreateRoom(userName.trim(), '', 15, 'district', district);
-    } catch (err: any) {
-      setLoadingLocation(false);
-      setError(err.message || 'Failed to identify district.');
-      setShowDistrictSelect(true);
-    }
-  };
-
-  const handleManualDistrictSelect = (district: string) => {
-    onCreateRoom(userName.trim(), '', 15, 'district', district);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+          const data = await res.json();
+          const district = data.address.state_district || data.address.county || data.address.city || data.address.state || 'Unknown';
+          setLoadingLocation(false);
+          onCreateRoom(userName.trim(), '', 15, 'district', district);
+        } catch (err) {
+          setLoadingLocation(false);
+          setError('Failed to identify district.');
+        }
+      },
+      () => {
+        setLoadingLocation(false);
+        setError('Location access denied.');
+      }
+    );
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -71,13 +74,27 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
     if (mode === 'district') {
       setLoadingLocation(true);
       try {
-        const district = await getDistrict();
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+              const data = await res.json();
+              const district = data.address.state_district || data.address.county || data.address.city || data.address.state || 'Unknown';
+              setLoadingLocation(false);
+              onCreateRoom(userName.trim(), '', maxMembers, 'district', district);
+            } catch (err) {
+              setLoadingLocation(false);
+              setError('Failed to identify district from location.');
+            }
+          },
+          () => {
+            setLoadingLocation(false);
+            setError('Location access denied. Cannot use district mode.');
+          }
+        );
+      } catch (err) {
         setLoadingLocation(false);
-        onCreateRoom(userName.trim(), '', maxMembers, 'district', district);
-      } catch (err: any) {
-        setLoadingLocation(false);
-        setError(err.message || 'Failed to identify district from location.');
-        setShowDistrictSelect(true);
+        setError('Geolocation is not supported by your browser.');
       }
     } else {
       onCreateRoom(userName.trim(), roomName.trim(), maxMembers, 'friends');
@@ -203,32 +220,11 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
                   <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                     {loadingLocation ? <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /> : <MapPin className="w-6 h-6 text-emerald-400" />}
                   </div>
-                  <div className="flex-1">
+                  <div>
                     <h3 className="text-base font-black text-emerald-400 uppercase tracking-tight">Join My District</h3>
                     <p className="text-xs text-emerald-500/60 font-medium">Instantly connect with people in your area</p>
                   </div>
                 </button>
-
-                {showDistrictSelect && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="bg-neutral-900/50 border border-white/5 rounded-2xl p-4 overflow-hidden"
-                  >
-                    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Or select manually:</p>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                      {BANGLADESH_DISTRICTS.map(d => (
-                        <button
-                          key={d}
-                          onClick={() => handleManualDistrictSelect(d)}
-                          className="px-3 py-2 bg-black/40 hover:bg-emerald-500/20 border border-white/5 rounded-lg text-[10px] font-bold text-neutral-400 hover:text-emerald-400 transition-all text-left"
-                        >
-                          {d}
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
               </motion.div>
             )}
 

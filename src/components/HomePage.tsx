@@ -6,7 +6,18 @@ import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../f
 import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
-import { containsBanned, BANGLADESH_DISTRICTS } from '../constants';
+import { containsBanned } from '../constants';
+
+const BANGLADESH_DISTRICTS = [
+  "Dhaka", "Faridpur", "Gazipur", "Gopalganj", "Kishoreganj", "Madaripur", "Manikganj", "Munshiganj", "Narayanganj", "Narsingdi", "Rajbari", "Shariatpur", "Tangail",
+  "Bagerhat", "Chuadanga", "Jessore", "Jhenaidah", "Khulna", "Kushtia", "Magura", "Meherpur", "Narail", "Satkhira",
+  "Bogra", "Joypurhat", "Naogaon", "Natore", "Chapai Nawabganj", "Pabna", "Rajshahi", "Sirajganj",
+  "Dinajpur", "Gaibandha", "Kurigram", "Lalmonirhat", "Nilphamari", "Panchagarh", "Rangpur", "Thakurgaon",
+  "Habiganj", "Moulvibazar", "Sunamganj", "Sylhet",
+  "Barguna", "Barisal", "Bhola", "Jhalokati", "Patuakhali", "Pirojpur",
+  "Bandarban", "Brahmanbaria", "Chandpur", "Chittagong", "Comilla", "Cox's Bazar", "Feni", "Khagrachhari", "Lakshmipur", "Noakhali", "Rangamati",
+  "Sherpur", "Jamalpur", "Netrokona", "Mymensingh"
+];
 
 // Approximate relative positions (0-100) for the SVG map
 const DISTRICT_POSITIONS: Record<string, { x: number; y: number }> = {
@@ -460,13 +471,6 @@ export const HomePage: React.FC<{
 
             {/* Map Section */}
             <div className="mt-20 w-full">
-              <div className="flex items-center justify-end mb-8">
-                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Map</span>
-                </div>
-              </div>
-              <BangladeshMap districtUsers={stats.districtUsers} />
             </div>
           </motion.div>
         </div>
