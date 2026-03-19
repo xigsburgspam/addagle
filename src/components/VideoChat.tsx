@@ -61,18 +61,81 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const [sessionTimer, setSessionTimer] = useState<number>(mode === 'video' ? 300 : 420); // 5 or 7 minutes in seconds
   const sessionTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Daily minutes usage tracking
+  // ── Daily video limit ──────────────────────────────────────────────────────
+  // One persistent countdown starting at mount — NOT tied to isConnected.
+  // This means the clock keeps running between calls and never resets per-call.
   const dailyUsageIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const dailyLimitReachedRef = useRef(false);
-  // Use refs so interval always reads latest values, not stale closure
-  const usageMinutesRef = useRef(userData?.dailyVideoUsage ?? 0);
-  const limitMinutesRef = useRef(userData?.dailyVideoLimit ?? 20);
-  useEffect(() => { usageMinutesRef.current = userData?.dailyVideoUsage ?? 0; }, [userData?.dailyVideoUsage]);
-  useEffect(() => { limitMinutesRef.current = userData?.dailyVideoLimit ?? 20; }, [userData?.dailyVideoLimit]);
-  const usageMinutes = userData?.dailyVideoUsage ?? 0;
-  const limitMinutes = userData?.dailyVideoLimit ?? 20;
-  const remainingMinutes = Math.max(0, limitMinutes - usageMinutes);
+  const dailyCountdownRef     = useRef<NodeJS.Timeout | null>(null);
+  const dailyLimitReachedRef  = useRef(false);
+  const limitMinutesRef       = useRef(userData?.dailyVideoLimit ?? 20);
+  const lastVideoDateRef      = useRef(userData?.lastVideoDate   ?? '');
+  const usageMinutesRef       = useRef<number>((() => {
+    const today = new Date().toISOString().split('T')[0];
+    return userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
+  })());
 
+  // Keep refs current whenever Firestore pushes updates
+  useEffect(() => { limitMinutesRef.current = userData?.dailyVideoLimit ?? 20; }, [userData?.dailyVideoLimit]);
+  useEffect(() => { lastVideoDateRef.current = userData?.lastVideoDate ?? ''; }, [userData?.lastVideoDate]);
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    usageMinutesRef.current = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
+  }, [userData?.dailyVideoUsage, userData?.lastVideoDate]);
+
+  // On-screen countdown state (seconds)
+  const [dailyRemainingSeconds, setDailyRemainingSeconds] = useState<number>(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const used  = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
+    return Math.max(0, ((userData?.dailyVideoLimit ?? 20) - used) * 60);
+  });
+  // Stable ref so interval reads latest value without re-creating itself
+  const dailyRemainingRef = useRef(dailyRemainingSeconds);
+  // Keep ref in sync if state is updated externally (e.g. new day detected)
+  useEffect(() => { dailyRemainingRef.current = dailyRemainingSeconds; }, [dailyRemainingSeconds]);
+
+  // Mount-time effect: runs once, independent of isConnected
+  useEffect(() => {
+    if (mode !== 'video' || isAdmin || !user) return;
+
+    // Per-second display tick
+    dailyCountdownRef.current = setInterval(() => {
+      const next = Math.max(0, dailyRemainingRef.current - 1);
+      dailyRemainingRef.current = next;
+      setDailyRemainingSeconds(next);
+
+      if (next <= 0 && !dailyLimitReachedRef.current) {
+        dailyLimitReachedRef.current = true;
+        clearInterval(dailyCountdownRef.current!);
+        clearInterval(dailyUsageIntervalRef.current!);
+        setConnectionError(`Daily limit reached (${limitMinutesRef.current} min). Try again tomorrow!`);
+        setTimeout(() => onExit(), 4000);
+      }
+    }, 1000);
+
+    // Persist to Firestore once per minute
+    dailyUsageIntervalRef.current = setInterval(async () => {
+      const today = new Date().toISOString().split('T')[0];
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        if (lastVideoDateRef.current !== today) {
+          await updateDoc(userRef, { dailyVideoUsage: 1, lastVideoDate: today });
+          usageMinutesRef.current  = 1;
+          lastVideoDateRef.current = today;
+        } else {
+          const newUsage = usageMinutesRef.current + 1;
+          await updateDoc(userRef, { dailyVideoUsage: newUsage });
+          usageMinutesRef.current = newUsage;
+        }
+      } catch (e) { console.error('Failed to persist daily usage', e); }
+    }, 60000);
+
+    return () => {
+      clearInterval(dailyCountdownRef.current!);
+      clearInterval(dailyUsageIntervalRef.current!);
+    };
+  }, [mode, isAdmin, user]); // ← NO isConnected: runs the whole session
+
+  // Session timer (per-match countdown, not daily)
   useEffect(() => {
     if (isConnected) {
       const initialTime = mode === 'video' ? 300 : 420;
@@ -91,52 +154,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current);
       setSessionTimer(mode === 'video' ? 300 : 420);
     }
-    return () => {
-      if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current);
-    };
+    return () => { if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current); };
   }, [isConnected, mode]);
-
-  // Track daily video usage: increment by 1 minute every 60s while connected
-  useEffect(() => {
-    if (mode !== 'video' || isAdmin || !isConnected || !user) return;
-    dailyLimitReachedRef.current = false;
-
-    dailyUsageIntervalRef.current = setInterval(async () => {
-      const today = new Date().toISOString().split('T')[0];
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        const currentUsage = usageMinutesRef.current;
-        const currentLimit = limitMinutesRef.current;
-        const currentLastDate = userData?.lastVideoDate;
-
-        let newUsage: number;
-        if (currentLastDate !== today) {
-          // New day — reset usage
-          newUsage = 1;
-          await updateDoc(userRef, { dailyVideoUsage: 1, lastVideoDate: today });
-        } else {
-          newUsage = currentUsage + 1;
-          await updateDoc(userRef, { dailyVideoUsage: newUsage });
-        }
-
-        // Update our ref immediately so next tick is accurate
-        usageMinutesRef.current = newUsage;
-
-        if (newUsage >= currentLimit && !dailyLimitReachedRef.current) {
-          dailyLimitReachedRef.current = true;
-          clearInterval(dailyUsageIntervalRef.current!);
-          setConnectionError(`Daily video chat limit reached (${currentLimit} min). Try again tomorrow!`);
-          setTimeout(() => onExit(), 4000);
-        }
-      } catch (e) {
-        console.error('Failed to update daily usage', e);
-      }
-    }, 60000);
-
-    return () => {
-      if (dailyUsageIntervalRef.current) clearInterval(dailyUsageIntervalRef.current);
-    };
-  }, [isConnected, mode, isAdmin, user]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -491,11 +510,9 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     if (!socket) return;
     if (mode === 'video' && !videoEnabled) return;
 
-    // Client-side daily minutes limit check
-    const usageMinutes = userData?.dailyVideoUsage ?? 0;
-    const limitMinutes = userData?.dailyVideoLimit ?? 20;
-    if (mode === 'video' && !isAdmin && usageMinutes >= limitMinutes) {
-      setConnectionError(`Daily video chat limit reached (${limitMinutes} min). Try again tomorrow!`);
+    // Client-side daily minutes limit check (use refs — never stale)
+    if (mode === 'video' && !isAdmin && dailyRemainingRef.current <= 0) {
+      setConnectionError(`Daily video chat limit reached (${limitMinutesRef.current} min). Try again tomorrow!`);
       setTimeout(() => onExit(), 5000);
       return;
     }
@@ -904,27 +921,31 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
           <StatsDisplay mode={mode} />
 
-          {mode === 'video' && !isAdmin && (
-            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black text-emerald-500/60 uppercase tracking-widest leading-none mb-1">Daily Limit</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(100, Math.round((usageMinutes / limitMinutes) * 100))}%`,
-                        background: remainingMinutes <= 5 ? '#ef4444' : remainingMinutes <= 10 ? '#f59e0b' : '#10b981'
-                      }}
-                    />
+          {mode === 'video' && !isAdmin && (() => {
+            const totalSec = limitMinutesRef.current * 60;
+            const usedSec  = totalSec - dailyRemainingSeconds;
+            const pct      = Math.min(100, Math.round((usedSec / totalSec) * 100));
+            const barColor = dailyRemainingSeconds <= 300 ? '#ef4444' : dailyRemainingSeconds <= 600 ? '#f59e0b' : '#10b981';
+            const mins = Math.floor(dailyRemainingSeconds / 60);
+            const secs = dailyRemainingSeconds % 60;
+            const label = `${mins}:${String(secs).padStart(2,'0')}`;
+            return (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border"
+                style={{ background: 'rgba(16,185,129,0.04)', borderColor: dailyRemainingSeconds <= 300 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.12)' }}>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[8px] font-black uppercase tracking-widest leading-none"
+                    style={{ color: 'rgba(16,185,129,0.5)' }}>Daily Left</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-14 sm:w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                      <div className="h-full rounded-full transition-all duration-1000"
+                        style={{ width: `${100 - pct}%`, background: barColor }} />
+                    </div>
+                    <span className="text-[11px] font-black tabular-nums" style={{ color: barColor }}>{label}</span>
                   </div>
-                  <span className="text-[10px] font-black text-white ml-1">
-                    {remainingMinutes} <span className="text-emerald-500/40">min left</span>
-                  </span>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">

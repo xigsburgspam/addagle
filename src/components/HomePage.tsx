@@ -296,19 +296,26 @@ export const HomePage: React.FC<{
                     {t.accessRevoked}
                   </div>
                 ) : (
-                  <>
+                  <>{(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const videoUsed = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
+                      const videoLimit = userData?.dailyVideoLimit ?? 20;
+                      const videoLimitReached = userData?.role !== 'admin' && videoUsed >= videoLimit;
+                      return (
                     <button
                       onClick={() => handleAction('video')}
-                      disabled={false}
-                      className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={videoLimitReached}
+                      className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:from-neutral-700 disabled:to-neutral-800 disabled:text-neutral-400 disabled:shadow-none"
                     >
                       <div className="flex flex-col items-center">
                         <div className="flex items-center gap-3">
-                          {t.startEncounter}
-                          <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />
+                          {videoLimitReached ? 'Daily Limit Reached' : t.startEncounter}
+                          {!videoLimitReached && <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />}
                         </div>
                       </div>
                     </button>
+                      );
+                    })()}
 
                     <button
                       onClick={() => handleAction('text')}
