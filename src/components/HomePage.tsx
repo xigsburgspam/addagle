@@ -120,6 +120,8 @@ export const HomePage: React.FC<{
     totalTextChats: 0,
     totalAccounts: 0,
     districtUsers: {} as Record<string, number>,
+    userVideoCount: 0,
+    userVideoAllowed: true
   });
 
   // Live counters from /api/stats
@@ -140,8 +142,16 @@ export const HomePage: React.FC<{
           }));
         }
 
-
         if (user?.uid) {
+          const videoRes = await fetch(`/api/user-video-stats/${user.uid}`);
+          if (videoRes.ok) {
+            const videoData = await videoRes.json();
+            setStats(prev => ({
+              ...prev,
+              userVideoCount: videoData.count,
+              userVideoAllowed: videoData.allowed
+            }));
+          }
         }
       } catch (e) {
         console.error('Failed to fetch stats:', e);
@@ -288,7 +298,7 @@ export const HomePage: React.FC<{
                   <>
                     <button
                       onClick={() => handleAction('video')}
-                      disabled={false}
+                      disabled={!stats.userVideoAllowed && user?.email !== 'edublitz71@gmail.com'}
                       className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="flex flex-col items-center">
@@ -296,6 +306,11 @@ export const HomePage: React.FC<{
                           {t.startEncounter}
                           <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />
                         </div>
+                        {user?.email !== 'edublitz71@gmail.com' && (
+                          <span className="text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                            {stats.userVideoCount}/7 Chats Today
+                          </span>
+                        )}
                       </div>
                     </button>
 

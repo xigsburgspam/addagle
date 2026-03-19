@@ -269,7 +269,38 @@ async function startServer() {
                 const myIsAdmin = isAdmin;
                 const partnerIsAdmin = (partnerSocket as any)._isAdmin;
                 
-
+                if (!myIsAdmin) {
+                  const today = new Date().toISOString().split('T')[0];
+                  let stats = userVideoChatStats.get(myUid);
+                  if (!stats || stats.lastDate !== today) {
+                    const userDoc = await adminDb.collection('users').doc(myUid).get();
+                    const userData = userDoc.data();
+                    if (userData && userData.lastVideoDate === today) {
+                      stats = { count: userData.videoCount || 0, lastDate: today };
+                    } else {
+                      stats = { count: 0, lastDate: today };
+                    }
+                  }
+                  stats.count++;
+                  userVideoChatStats.set(myUid, stats);
+                  adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                }
+                if (!partnerIsAdmin && partnerUid) {
+                  const today = new Date().toISOString().split('T')[0];
+                  let stats = userVideoChatStats.get(partnerUid);
+                  if (!stats || stats.lastDate !== today) {
+                    const userDoc = await adminDb.collection('users').doc(partnerUid).get();
+                    const userData = userDoc.data();
+                    if (userData && userData.lastVideoDate === today) {
+                      stats = { count: userData.videoCount || 0, lastDate: today };
+                    } else {
+                      stats = { count: 0, lastDate: today };
+                    }
+                  }
+                  stats.count++;
+                  userVideoChatStats.set(partnerUid, stats);
+                  adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                }
               }
               activeMatchStartTimes.delete(roomId);
               const timeout = sessionTimeouts.get(roomId);
@@ -351,7 +382,44 @@ async function startServer() {
             activeMatches.delete(socket.id);
             activeMatches.delete(partner.socketId);
             // Handle count if >= 40s (which it is)
-
+                if (isVideo) {
+                  if (!isAdmin) {
+                    const today = new Date().toISOString().split('T')[0];
+                    let stats = userVideoChatStats.get(uid);
+                    if (!stats || stats.lastDate !== today) {
+                      // Fetch from DB if not in memory or date changed
+                      const userDoc = await adminDb.collection('users').doc(uid).get();
+                      const userData = userDoc.data();
+                      if (userData && userData.lastVideoDate === today) {
+                        stats = { count: userData.videoCount || 0, lastDate: today };
+                      } else {
+                        stats = { count: 0, lastDate: today };
+                      }
+                    }
+                    stats.count++;
+                    userVideoChatStats.set(uid, stats);
+                    adminDb.collection('users').doc(uid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                  }
+                  if (partnerSocket && !(partnerSocket as any)._isAdmin) {
+                    const partnerUid = (partnerSocket as any)._uid;
+                    if (partnerUid) {
+                      const today = new Date().toISOString().split('T')[0];
+                      let stats = userVideoChatStats.get(partnerUid);
+                      if (!stats || stats.lastDate !== today) {
+                        const userDoc = await adminDb.collection('users').doc(partnerUid).get();
+                        const userData = userDoc.data();
+                        if (userData && userData.lastVideoDate === today) {
+                          stats = { count: userData.videoCount || 0, lastDate: today };
+                        } else {
+                          stats = { count: 0, lastDate: today };
+                        }
+                      }
+                      stats.count++;
+                      userVideoChatStats.set(partnerUid, stats);
+                      adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                    }
+                  }
+                }
             activeMatchStartTimes.delete(roomId);
             sessionTimeouts.delete(roomId);
           }
@@ -913,7 +981,21 @@ async function startServer() {
     });
   });
 
-
+  app.get('/api/user-video-stats/:uid', async (req, res) => {
+    const { uid } = req.params;
+    let isAdmin = false;
+    try {
+      const userDoc = await adminDb.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        isAdmin = userData?.role === 'admin' || userData?.email === 'edublitz71@gmail.com';
+      }
+    } catch (e) {
+      console.error('Failed to check admin status for stats:', e);
+    }
+    const limit = await checkVideoLimit(uid, isAdmin);
+    res.json(limit);
+  });
 
   app.get('/api/active-rooms', (req, res) => {
     const activeRooms = Array.from(rooms.entries()).map(([id, data]) => ({
