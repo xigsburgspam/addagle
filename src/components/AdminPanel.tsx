@@ -13,8 +13,7 @@ interface User {
   displayName?: string;
   role: string;
   isBlocked: boolean;
-  dailyVideoLimit?: number;
-  dailyVideoUsage?: number;
+  videoCount?: number;
   lastVideoDate?: string;
 }
 
@@ -55,7 +54,7 @@ interface FootballMatch {
 }
 
 export const AdminPanel: React.FC = () => {
-  const { isAdmin, user } = useFirebase();
+  const { isAdmin } = useFirebase();
   const { t } = useLanguage();
   const [reports,      setReports]      = useState<Report[]>([]);
   const [blockedEmails,setBlockedEmails]= useState<BlockedEmail[]>([]);
@@ -149,14 +148,6 @@ export const AdminPanel: React.FC = () => {
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
     }
-  };
-
-  const updateLimit = async (targetUid: string, newLimit: number) => {
-    await fetch('/api/admin/user/limit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminUid: user?.email, targetUid, newLimit })
-    });
   };
 
   const addMatch = async () => {
@@ -448,13 +439,7 @@ export const AdminPanel: React.FC = () => {
                               Last: {user.lastVideoDate || 'Never'}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              defaultValue={user.dailyVideoLimit || 30}
-                              className="w-16 bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-center text-sm"
-                              onBlur={(e) => updateLimit(user.uid, parseInt(e.target.value))}
-                            />
+                          <div className="flex gap-2">
                             {!user.isBlocked ? (
                               <button onClick={() => blockUser(user.id, user.email)}
                                 className="p-4 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-2xl transition-all">

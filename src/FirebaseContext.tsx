@@ -13,10 +13,6 @@ interface UserData {
   isEmailBlocked?: boolean;
   savedDisplayName?: string;
   hasSavedName?: boolean;
-  blockedUsers?: string[];
-  dailyVideoLimit?: number;
-  dailyVideoUsage?: number;
-  lastVideoDate?: string;
 }
 
 interface FirebaseContextType {
