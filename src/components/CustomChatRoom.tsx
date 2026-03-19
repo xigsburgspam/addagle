@@ -50,6 +50,7 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
   const [reportReason, setReportReason] = useState('');
   const [reportStatus, setReportStatus] = useState('');
   const [replyTo, setReplyTo] = useState<{ name: string; text: string } | null>(null);
+  const [activeEmojiMenu, setActiveEmojiMenu] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -279,10 +280,28 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
 
                   <div className="relative flex items-center gap-2 group">
                     {entry.name === roomData.userName && (
-                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                      <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                         <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
                           <Reply className="w-3 h-3 text-neutral-400" />
                         </button>
+                        <div className="relative">
+                          <button onClick={() => setActiveEmojiMenu(activeEmojiMenu === entry.id ? null : entry.id)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                            <Smile className="w-3 h-3 text-neutral-400" />
+                          </button>
+                          {activeEmojiMenu === entry.id && (
+                            <div className="absolute bottom-full right-0 mb-2 p-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
+                              {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => { react(entry.id, emoji); setActiveEmojiMenu(null); }}
+                                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-sm"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -311,25 +330,27 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                     </div>
 
                     {entry.name !== roomData.userName && (
-                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                      <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                         <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
                           <Reply className="w-3 h-3 text-neutral-400" />
                         </button>
-                        <div className="relative group/emoji">
-                          <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                        <div className="relative">
+                          <button onClick={() => setActiveEmojiMenu(activeEmojiMenu === entry.id ? null : entry.id)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
                             <Smile className="w-3 h-3 text-neutral-400" />
                           </button>
-                          <div className="absolute bottom-full left-0 mb-2 p-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl hidden group-hover/emoji:flex items-center gap-1 z-20">
-                            {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
-                              <button
-                                key={emoji}
-                                onClick={() => react(entry.id, emoji)}
-                                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-sm"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
+                          {activeEmojiMenu === entry.id && (
+                            <div className="absolute bottom-full left-0 mb-2 p-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
+                              {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => { react(entry.id, emoji); setActiveEmojiMenu(null); }}
+                                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-sm"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
