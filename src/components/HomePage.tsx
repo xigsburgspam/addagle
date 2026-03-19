@@ -128,6 +128,13 @@ export const HomePage: React.FC<{
     districtUsers: {} as Record<string, number>,
   });
 
+  // Save ?ref= to localStorage immediately on page load
+  // This runs before any auth state, so it's always captured
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) localStorage.setItem('pendingRef', ref);
+  }, []);
+
   // Load announcements and compute unread count
   useEffect(() => {
     const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
@@ -211,7 +218,8 @@ export const HomePage: React.FC<{
 
   const copyInviteLink = () => {
     const code = userData?.inviteCode || user?.uid?.slice(0, 8).toUpperCase();
-    const link = `${window.location.origin}?ref=${code}`;
+    // Use full UID as the ref code — direct Firestore lookup, no query needed
+    const link = `${window.location.origin}?ref=${user?.uid || code}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopiedInvite(true);
       setTimeout(() => setCopiedInvite(false), 2000);
@@ -589,7 +597,7 @@ export const HomePage: React.FC<{
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-neutral-900 rounded-xl px-3 py-2 text-xs font-mono text-neutral-300 truncate border border-neutral-800">
-                        {`${window.location.origin}?ref=${userData?.inviteCode || user.uid.slice(0,8).toUpperCase()}`}
+                        {`${window.location.origin}?ref=${user.uid}`}
                       </div>
                       <button
                         onClick={copyInviteLink}

@@ -296,6 +296,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       setTimeout(() => onExit(), 4000);
     });
 
+    // Partner topped up — increase our local limit too
+    socket.on('chat-topup', ({ chars }: { chars: number }) => {
+      setChatLimit(prev => prev + chars);
+    });
+
     return () => {
       socket.off('matched');
       socket.off('partner-skipped');
@@ -304,6 +309,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       socket.off('admin-connected');
       socket.off('admin-disconnected-from-room');
       socket.off('limit-reached');
+      socket.off('chat-topup');
     };
   }, [socket]);
 
@@ -543,7 +549,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
   const handleTopup = async (chars: number) => {
     if (!user || topupLoading) return;
-    const cost = chars / CHARS_PER_TOKEN; // 1 token per 50 chars
+    const cost = Math.ceil(chars / CHARS_PER_TOKEN); // 1 token per 50 chars
     setTopupLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);
@@ -553,7 +559,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         if (current < cost) throw new Error('INSUFFICIENT_TOKENS');
         tx.update(userRef, { tokens: current - cost });
       });
+      // Increase limit locally for the buyer
       setChatLimit(prev => prev + chars);
+      // Notify partner via socket so their limit increases too
+      if (socket && roomId) {
+        socket.emit('chat-topup', { roomId, chars });
+      }
       setShowTopup(false);
     } catch (e: any) {
       if (e?.message !== 'INSUFFICIENT_TOKENS') console.error('Topup failed', e);

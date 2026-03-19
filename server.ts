@@ -493,6 +493,11 @@ async function startServer() {
       socket.to(roomId).emit('message-reaction', { messageId, emoji });
     });
 
+    // Chat topup — relay to partner so both sides increase their limit
+    socket.on('chat-topup', ({ roomId, chars }) => {
+      socket.to(roomId).emit('chat-topup', { chars });
+    });
+
     // Reactions
     socket.on('reaction', (data) => {
       if (data.roomId) {

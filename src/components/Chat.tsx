@@ -58,8 +58,14 @@ export const Chat: React.FC<ChatProps> = ({
   const [totalCharsUsed, setTotalCharsUsed] = useState(0);
   // undefined means no limit (video chat); a number means text chat limit
   const hasLimit = chatSessionLimit !== undefined;
+  // Keep as state so UI re-renders when limit changes (e.g. after topup)
+  const [effectiveLimitState, setEffectiveLimitState] = React.useState(chatSessionLimit ?? Infinity);
   const chatSessionLimitRef = React.useRef(chatSessionLimit ?? Infinity);
-  React.useEffect(() => { chatSessionLimitRef.current = chatSessionLimit ?? Infinity; }, [chatSessionLimit]);
+  React.useEffect(() => {
+    const val = chatSessionLimit ?? Infinity;
+    chatSessionLimitRef.current = val;
+    setEffectiveLimitState(val); // triggers re-render so chatCharsLeft recalculates
+  }, [chatSessionLimit]);
 
   const scrollRef    = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLTextAreaElement>(null);
