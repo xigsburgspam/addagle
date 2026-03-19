@@ -56,6 +56,10 @@ export const Chat: React.FC<ChatProps> = ({
   const [newReactionId, setNewReactionId] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [totalCharsUsed, setTotalCharsUsed] = useState(0);
+  // undefined means no limit (video chat); a number means text chat limit
+  const hasLimit = chatSessionLimit !== undefined;
+  const chatSessionLimitRef = React.useRef(chatSessionLimit ?? Infinity);
+  React.useEffect(() => { chatSessionLimitRef.current = chatSessionLimit ?? Infinity; }, [chatSessionLimit]);
 
   const scrollRef    = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLTextAreaElement>(null);
@@ -110,7 +114,7 @@ export const Chat: React.FC<ChatProps> = ({
       // Count partner's message toward the shared session limit
       setTotalCharsUsed(prev => {
         const newTotal = prev + m.text.length;
-        if (newTotal >= (chatSessionLimit ?? CHAT_CHAR_TOTAL)) {
+        if (newTotal >= chatSessionLimitRef.current) {
           setTimeout(() => onChatLimitReached?.(), 1500);
         }
         return newTotal;
@@ -146,7 +150,7 @@ export const Chat: React.FC<ChatProps> = ({
     const t = inputText.trim();
     if (!t || !socket) return;
     if (t.length > MSG_CHAR_LIMIT) return;
-    if (chatCharsLeft <= 0) return;
+    if (hasLimit && chatCharsLeft <= 0) return;
     if (containsBanned(t)) {
       setInputText('');
       return;
@@ -169,7 +173,7 @@ export const Chat: React.FC<ChatProps> = ({
     setTotalCharsUsed(newTotal);
     setInputText('');
     // Auto-skip when total chat chars exceeded
-    if (newTotal >= (chatSessionLimit ?? CHAT_CHAR_TOTAL)) {
+    if (newTotal >= chatSessionLimitRef.current) {
       setTimeout(() => onChatLimitReached?.(), 1500);
     }
     setReplyingTo(null);
@@ -269,7 +273,7 @@ export const Chat: React.FC<ChatProps> = ({
                         <CheckCheck className="w-3 h-3 text-emerald-300" />
   );
 
-  const effectiveLimit = chatSessionLimit ?? CHAT_CHAR_TOTAL;
+  const effectiveLimit = chatSessionLimitRef.current;
   const msgCharsLeft = MSG_CHAR_LIMIT - inputText.length;
   const chatCharsLeft = effectiveLimit - totalCharsUsed;
 
@@ -461,14 +465,14 @@ export const Chat: React.FC<ChatProps> = ({
         })}
 
         {/* Grey notice when approaching chat limit */}
-        {chatCharsLeft <= 100 && chatCharsLeft > 0 && (
+        {hasLimit && chatCharsLeft <= 100 && chatCharsLeft > 0 && (
           <div className="flex justify-center my-2">
             <span className="text-[10px] font-bold text-neutral-500 bg-neutral-900/60 px-3 py-1 rounded-full border border-neutral-800">
               ⚠ {chatCharsLeft} characters remaining in this chat
             </span>
           </div>
         )}
-        {chatCharsLeft <= 0 && (
+        {hasLimit && chatCharsLeft <= 0 && (
           <div className="flex justify-center my-2">
             <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
               Chat limit reached — finding next person...
@@ -633,8 +637,8 @@ export const Chat: React.FC<ChatProps> = ({
                   e.preventDefault(); send();
                 }
               }}
-              placeholder={chatCharsLeft <= 0 ? "Chat limit reached" : "Message…"}
-              disabled={chatCharsLeft <= 0}
+              placeholder={hasLimit && chatCharsLeft <= 0 ? "Chat limit reached" : "Message…"}
+              disabled={hasLimit && chatCharsLeft <= 0}
               rows={1}
               style={{ maxHeight: 120, minHeight: 22 }}
               className="flex-1 bg-transparent text-[13.5px] text-white leading-relaxed

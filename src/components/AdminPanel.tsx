@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc } from '../firebase';
+import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc, getDocs, arrayRemove } from '../firebase';
 import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff, Users, Search, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -213,7 +213,25 @@ export const AdminPanel: React.FC = () => {
 
   const deleteAnnouncement = async (id: string) => {
     if (!confirm('Delete this announcement?')) return;
-    try { await deleteDoc(doc(db, 'announcements', id)); } catch (e) { console.error(e); }
+    try {
+      // Delete the announcement
+      await deleteDoc(doc(db, 'announcements', id));
+      // Clean up seenAnnouncements from ALL users who have this id stored
+      // Query in batches — arrayRemove is safe even if the value isn't present
+      const usersSnap = await getDocs(query(collection(db, 'users')));
+      const batch: Promise<void>[] = [];
+      usersSnap.forEach(userDoc => {
+        const seen: string[] = userDoc.data().seenAnnouncements || [];
+        if (seen.includes(id)) {
+          batch.push(
+            updateDoc(doc(db, 'users', userDoc.id), {
+              seenAnnouncements: arrayRemove(id)
+            }).catch(e => console.error('Failed to clean seenAnnouncements for', userDoc.id, e))
+          );
+        }
+      });
+      await Promise.all(batch);
+    } catch (e) { console.error('Delete announcement failed', e); }
   };
 
   const addMatch = async () => {

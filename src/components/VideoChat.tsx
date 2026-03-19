@@ -58,6 +58,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const [reportReason, setReportReason] = useState('');
 
   const [showChat, setShowChat] = useState(false);
+  const [sharedCharsUsed, setSharedCharsUsed] = useState(0);
+  const [chatLimit, setChatLimit] = useState(2599); // can grow via topup
+  const CHARS_PER_TOKEN = 50;
+  const [showTopup, setShowTopup] = useState(false);
+  const [topupAmount, setTopupAmount] = useState<number>(100);
+  const [topupLoading, setTopupLoading] = useState(false);
   const [videoTimer, setVideoTimer] = useState(300); // 5 min in seconds
   const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -530,7 +536,29 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     if (socket) socket.emit('next');
     handleDisconnect('User skipped');
     setAudioEnabled(true);
+    setSharedCharsUsed(0);
+    setChatLimit(2599); // reset limit for new session
     findNext();
+  };
+
+  const handleTopup = async (chars: number) => {
+    if (!user || topupLoading) return;
+    const cost = chars / CHARS_PER_TOKEN; // 1 token per 50 chars
+    setTopupLoading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userRef);
+        const current = snap.exists() ? (snap.data().tokens ?? 0) : 0;
+        if (current < cost) throw new Error('INSUFFICIENT_TOKENS');
+        tx.update(userRef, { tokens: current - cost });
+      });
+      setChatLimit(prev => prev + chars);
+      setShowTopup(false);
+    } catch (e: any) {
+      if (e?.message !== 'INSUFFICIENT_TOKENS') console.error('Topup failed', e);
+    }
+    setTopupLoading(false);
   };
 
   const handleDrop = () => {
@@ -1064,41 +1092,52 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
           ${mode === 'video' && !showChat ? 'translate-y-full lg:translate-y-0 lg:flex' : 'translate-y-0'}
         `}>
           <div className="h-full w-full flex flex-col">
-            <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
-              <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">{t.sessionLog}</span>
-              {mode === 'text' && (
-                <span className="ml-auto mr-0 text-[9px] font-mono text-neutral-600">
-                  Chat: <span className="text-neutral-400">2599</span> chars/session
-                </span>
-              )}
+            <div className="p-3 sm:p-4 border-b border-neutral-900 flex items-center gap-2 bg-neutral-950/50 flex-wrap">
+              {/* Live char counter — text mode only */}
+              {mode === 'text' && (() => {
+                const left = Math.max(0, chatLimit - sharedCharsUsed);
+                const pct = Math.min(100, Math.round((sharedCharsUsed / chatLimit) * 100));
+                return (
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className={`text-[9px] font-mono font-black tabular-nums ${
+                        left <= 0 ? 'text-red-400' : left <= 100 ? 'text-yellow-400' : 'text-neutral-400'
+                      }`}>
+                        {left <= 0 ? 'Limit reached' : `${left} / ${chatLimit} chars left`}
+                      </span>
+                      <div className="w-24 sm:w-32 h-1 rounded-full overflow-hidden bg-neutral-800">
+                        <div className="h-full rounded-full transition-all duration-300"
+                          style={{ width: `${pct}%`, background: left <= 0 ? '#ef4444' : left <= 100 ? '#f59e0b' : '#10b981' }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
-              <div className="ml-auto flex items-center gap-4">
+              <div className="flex items-center gap-2 ml-auto shrink-0">
                 {mode === 'text' && (
-                  <div className="flex items-center gap-2">
+                  <>
+                    {/* Topup button */}
+                    <button
+                      onClick={() => setShowTopup(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                      style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)' }}
+                    >
+                      <span>⚡</span> Topup Chat
+                    </button>
                     <button
                       onClick={handleNext}
                       disabled={!isConnected && !isSearching}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed rounded-lg font-black text-xs uppercase tracking-widest transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed rounded-lg font-black text-[10px] uppercase tracking-widest transition-all"
                     >
-                      Skip
-                      <SkipForward className="w-3 h-3" />
+                      Skip <SkipForward className="w-3 h-3" />
                     </button>
                     {isConnected && (
-                      <button
-                        onClick={() => setShowReportModal(true)}
-                        className="p-2 bg-neutral-800 hover:bg-red-500 text-white rounded-lg transition-all"
-                      >
-                        <Flag className="w-4 h-4" />
+                      <button onClick={() => setShowReportModal(true)} className="p-1.5 bg-neutral-800 hover:bg-red-500 text-white rounded-lg transition-all">
+                        <Flag className="w-3.5 h-3.5" />
                       </button>
                     )}
-                  </div>
-                )}
-                {isConnected && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-500">{t.encrypted}</span>
-                  </div>
+                  </>
                 )}
                 {mode === 'video' && (
                   <button onClick={() => setShowChat(false)} className="lg:hidden p-2 hover:bg-neutral-800 rounded-lg transition-colors">
@@ -1109,7 +1148,15 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
             </div>
             <div className="flex-1 overflow-hidden">
               {roomId && user ? (
-                <Chat socket={socket} roomId={roomId} currentUserId={user.uid} onNewMessage={handleNewMessage} onChatLimitReached={handleNext} />
+                <Chat
+                  socket={socket}
+                  roomId={roomId}
+                  currentUserId={user.uid}
+                  onNewMessage={handleNewMessage}
+                  onChatLimitReached={mode === 'text' ? handleNext : undefined}
+                  onTotalCharsChange={mode === 'text' ? setSharedCharsUsed : undefined}
+                  chatSessionLimit={mode === 'text' ? chatLimit : undefined}
+                />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-800 p-8 text-center">
                   <Terminal className="w-12 h-12 mb-4 opacity-10" />
@@ -1122,6 +1169,100 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         </div>
 
       </main>
+
+      {/* Topup Chat Modal — text mode only */}
+      <AnimatePresence>
+        {showTopup && mode === 'text' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+            onClick={() => setShowTopup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 16 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 16 }}
+              transition={{ duration: 0.2, ease: [0.34, 1.2, 0.64, 1] }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+              style={{ background: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              {/* Header */}
+              <div className="px-6 pt-5 pb-4 flex items-center justify-between"
+                style={{ background: 'linear-gradient(135deg,#052e16,#0f172a)' }}>
+                <div>
+                  <p className="text-white font-black text-base uppercase tracking-widest">⚡ Topup Chat</p>
+                  <p className="text-neutral-400 text-xs mt-0.5">50 characters = 1 token</p>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
+                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <span className="text-emerald-400 font-black text-sm">{tokens}</span>
+                  <span className="text-neutral-500 text-[10px] font-bold">tokens</span>
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="px-6 py-5">
+                <p className="text-neutral-500 text-[10px] font-black uppercase tracking-widest mb-3">Add Characters</p>
+                <div className="grid grid-cols-3 gap-2 mb-5">
+                  {[50, 100, 200, 500, 1000, 2000].map(chars => {
+                    const cost = Math.ceil(chars / CHARS_PER_TOKEN);
+                    const canAfford = tokens >= cost;
+                    const selected = topupAmount === chars;
+                    return (
+                      <button
+                        key={chars}
+                        onClick={() => canAfford && setTopupAmount(chars)}
+                        disabled={!canAfford}
+                        className="flex flex-col items-center gap-1 py-3 px-2 rounded-2xl transition-all"
+                        style={{
+                          background: selected ? 'rgba(16,185,129,0.18)' : canAfford ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)',
+                          border: selected ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                          opacity: canAfford ? 1 : 0.35,
+                          cursor: canAfford ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        <span className="text-white font-black text-sm">+{chars}</span>
+                        <span className="text-neutral-500 text-[9px] font-bold">chars</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Cost display */}
+                <div className="flex items-center justify-between px-4 py-3 rounded-2xl mb-4"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <span className="text-neutral-400 text-sm">Cost</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-white font-black text-base">{Math.ceil(topupAmount / CHARS_PER_TOKEN)}</span>
+                    <span className="text-neutral-500 text-xs font-bold">tokens</span>
+                    <span className="text-neutral-600 text-xs mx-1">→</span>
+                    <span className="text-emerald-400 font-black text-base">{tokens - Math.ceil(topupAmount / CHARS_PER_TOKEN)}</span>
+                    <span className="text-neutral-500 text-xs font-bold">remaining</span>
+                  </div>
+                </div>
+
+                {/* Buy button */}
+                <button
+                  onClick={() => handleTopup(topupAmount)}
+                  disabled={topupLoading || tokens < Math.ceil(topupAmount / CHARS_PER_TOKEN)}
+                  className="w-full py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all"
+                  style={{
+                    background: tokens < Math.ceil(topupAmount / CHARS_PER_TOKEN) ? 'rgba(255,255,255,0.06)' : '#10b981',
+                    color: tokens < Math.ceil(topupAmount / CHARS_PER_TOKEN) ? '#6b7280' : '#000',
+                    cursor: tokens < Math.ceil(topupAmount / CHARS_PER_TOKEN) ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {topupLoading ? 'Processing...' : `Buy +${topupAmount} chars`}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

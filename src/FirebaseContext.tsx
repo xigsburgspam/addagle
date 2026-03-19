@@ -80,7 +80,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
               const snap = await getDoc(userDocRef);
-              if (snap.exists()) return true; // already exists
+              if (snap.exists()) {
+                // Backfill inviteCode for existing users who never got one
+                const data = snap.data();
+                if (!data.inviteCode) {
+                  updateDoc(userDocRef, { inviteCode }).catch(() => {});
+                }
+                return true;
+              }
               // Doc missing — create it
               await setDoc(userDocRef, newUserData);
               console.log('User doc created successfully');
