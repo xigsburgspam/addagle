@@ -35,10 +35,11 @@ interface ChatProps {
   roomId: string;
   currentUserId: string;
   onNewMessage?: () => void;
+  onChatLimitReached?: () => void;
 }
 
 export const Chat: React.FC<ChatProps> = ({
-  socket, roomId, currentUserId, onNewMessage
+  socket, roomId, currentUserId, onNewMessage, onChatLimitReached
 }) => {
   const [messages,      setMessages]      = useState<Message[]>([]);
   const [inputText,     setInputText]     = useState('');
@@ -131,7 +132,7 @@ export const Chat: React.FC<ChatProps> = ({
     const t = inputText.trim();
     if (!t || !socket) return;
     if (t.length > MSG_CHAR_LIMIT) return;
-    if (totalCharsUsed + t.length > CHAT_CHAR_TOTAL) return;
+    if (chatCharsLeft <= 0) return;
     if (containsBanned(t)) {
       setInputText('');
       return;
@@ -150,8 +151,13 @@ export const Chat: React.FC<ChatProps> = ({
     socket.emit('send-chat-message', { roomId, message: msg });
     socket.emit('message-delivered', { roomId, messageId: msg.id });
     setMessages(p => [...p, msg]);
-    setTotalCharsUsed(prev => prev + t.length);
+    const newTotal = totalCharsUsed + t.length;
+    setTotalCharsUsed(newTotal);
     setInputText('');
+    // Auto-skip when total chat chars exceeded
+    if (newTotal >= CHAT_CHAR_TOTAL) {
+      setTimeout(() => onChatLimitReached?.(), 1500);
+    }
     setReplyingTo(null);
     isAtBottom.current = true;
     if (inputRef.current) { inputRef.current.style.height = 'auto'; inputRef.current.focus(); }
@@ -267,6 +273,16 @@ export const Chat: React.FC<ChatProps> = ({
           if (!target.closest('[data-portal-menu]')) setMenuId(null);
         }}
       >
+        {/* Chat chars remaining indicator — always visible top right */}
+        <div className="sticky top-0 right-0 flex justify-end mb-1 pointer-events-none z-10">
+          <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full transition-all ${
+            chatCharsLeft <= 0 ? 'bg-red-500/20 text-red-400' :
+            chatCharsLeft <= 100 ? 'bg-neutral-800/90 text-yellow-400' :
+            'bg-neutral-900/60 text-neutral-600'
+          }`}>
+            {chatCharsLeft <= 0 ? 'Chat limit reached' : `${chatCharsLeft} chat chars left`}
+          </span>
+        </div>
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40">
             <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30
@@ -438,6 +454,22 @@ export const Chat: React.FC<ChatProps> = ({
           );
         })}
 
+        {/* Grey notice when approaching chat limit */}
+        {chatCharsLeft <= 100 && chatCharsLeft > 0 && (
+          <div className="flex justify-center my-2">
+            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-900/60 px-3 py-1 rounded-full border border-neutral-800">
+              ⚠ {chatCharsLeft} characters remaining in this chat
+            </span>
+          </div>
+        )}
+        {chatCharsLeft <= 0 && (
+          <div className="flex justify-center my-2">
+            <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
+              Chat limit reached — finding next person...
+            </span>
+          </div>
+        )}
+
         <AnimatePresence>
           {partnerTyping && (
             <motion.div
@@ -595,7 +627,8 @@ export const Chat: React.FC<ChatProps> = ({
                   e.preventDefault(); send();
                 }
               }}
-              placeholder="Message…"
+              placeholder={chatCharsLeft <= 0 ? "Chat limit reached" : "Message…"}
+              disabled={chatCharsLeft <= 0}
               rows={1}
               style={{ maxHeight: 120, minHeight: 22 }}
               className="flex-1 bg-transparent text-[13.5px] text-white leading-relaxed

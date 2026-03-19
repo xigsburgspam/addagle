@@ -60,6 +60,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
 
+        // Generate a stable invite code from uid
+        const inviteCode = firebaseUser.uid.slice(0, 8).toUpperCase();
+
         const newUserData: UserData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
@@ -68,6 +71,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           role: firebaseUser.email === 'edublitz71@gmail.com' ? 'admin' : 'user',
           isBlocked: false,
           tokens: 100,
+          inviteCode,
+          seenAnnouncements: [],
         };
 
         // ── Step 1: create doc if it doesn't exist, with retries ──
@@ -82,9 +87,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
                 .catch(() => {});
               // Handle referral bonus
+              // Read from sessionStorage because Google OAuth redirect wipes the URL params
               try {
-                const urlParams = new URLSearchParams(window.location.search);
-                const refCode = urlParams.get('ref');
+                const urlRef = new URLSearchParams(window.location.search).get('ref');
+                if (urlRef) sessionStorage.setItem('pendingRef', urlRef);
+                const refCode = sessionStorage.getItem('pendingRef');
+                sessionStorage.removeItem('pendingRef');
                 if (refCode && refCode !== inviteCode) {
                   const refSnap = await getDocs(query(collection(db, 'users'), where('inviteCode', '==', refCode)));
                   if (!refSnap.empty) {

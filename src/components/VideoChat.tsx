@@ -817,6 +817,19 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
           <StatsDisplay mode={mode} />
 
+          {/* 5-min session timer in header beside Video Chatting */}
+          {mode === 'video' && isConnected && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border"
+              style={{ background: videoTimer <= 30 ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.05)', borderColor: videoTimer <= 30 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.12)' }}>
+              <div className={`w-1.5 h-1.5 rounded-full ${videoTimer <= 30 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+              <span className="text-[11px] font-black font-mono tabular-nums"
+                style={{ color: videoTimer <= 30 ? '#ef4444' : videoTimer <= 60 ? '#f59e0b' : '#10b981' }}>
+                {Math.floor(videoTimer / 60)}:{String(videoTimer % 60).padStart(2, '0')}
+              </span>
+              <span className="text-[8px] font-bold uppercase tracking-widest text-neutral-600 hidden sm:inline">left</span>
+            </div>
+          )}
+
           {mode === 'video' && !isAdmin && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border"
               style={{ background: 'rgba(16,185,129,0.04)', borderColor: tokens < videoCallCost ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.12)' }}>
@@ -863,16 +876,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
                 playsInline
                 className={`w-full h-full object-contain ${!isConnected ? 'hidden' : ''}`}
               />
-
-              {/* 5-min session countdown */}
-              {isConnected && (
-                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 shadow-lg">
-                  <div className={`w-2 h-2 rounded-full ${videoTimer <= 30 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                  <span className={`text-xs font-mono font-black ${videoTimer <= 30 ? 'text-red-400' : 'text-white'}`}>
-                    {Math.floor(videoTimer / 60)}:{String(videoTimer % 60).padStart(2, '0')}
-                  </span>
-                </div>
-              )}
 
               <AnimatePresence>
                 {isAdminConnected && (
@@ -1106,7 +1109,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
             </div>
             <div className="flex-1 overflow-hidden">
               {roomId && user ? (
-                <Chat socket={socket} roomId={roomId} currentUserId={user.uid} onNewMessage={handleNewMessage} />
+                <Chat socket={socket} roomId={roomId} currentUserId={user.uid} onNewMessage={handleNewMessage} onChatLimitReached={handleNext} />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-800 p-8 text-center">
                   <Terminal className="w-12 h-12 mb-4 opacity-10" />
