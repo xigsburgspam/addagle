@@ -36,10 +36,12 @@ interface ChatProps {
   currentUserId: string;
   onNewMessage?: () => void;
   onChatLimitReached?: () => void;
+  onTotalCharsChange?: (used: number) => void;
+  chatSessionLimit?: number;
 }
 
 export const Chat: React.FC<ChatProps> = ({
-  socket, roomId, currentUserId, onNewMessage, onChatLimitReached
+  socket, roomId, currentUserId, onNewMessage, onChatLimitReached, onTotalCharsChange, chatSessionLimit
 }) => {
   const [messages,      setMessages]      = useState<Message[]>([]);
   const [inputText,     setInputText]     = useState('');
@@ -83,6 +85,10 @@ export const Chat: React.FC<ChatProps> = ({
   }, [messages]);
 
   useEffect(() => {
+    onTotalCharsChange?.(totalCharsUsed);
+  }, [totalCharsUsed]);
+
+  useEffect(() => {
     const close = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('[data-portal-menu]')) return;
@@ -101,6 +107,14 @@ export const Chat: React.FC<ChatProps> = ({
     const onMsg = (m: Message) => {
       setMessages(p => [...p, { ...m, status: 'delivered' }]);
       socket.emit('message-seen', { roomId, messageId: m.id });
+      // Count partner's message toward the shared session limit
+      setTotalCharsUsed(prev => {
+        const newTotal = prev + m.text.length;
+        if (newTotal >= (chatSessionLimit ?? CHAT_CHAR_TOTAL)) {
+          setTimeout(() => onChatLimitReached?.(), 1500);
+        }
+        return newTotal;
+      });
       if (onNewMessage) onNewMessage();
     };
     const onDelivered = ({ messageId }: { messageId: string }) =>
@@ -155,7 +169,7 @@ export const Chat: React.FC<ChatProps> = ({
     setTotalCharsUsed(newTotal);
     setInputText('');
     // Auto-skip when total chat chars exceeded
-    if (newTotal >= CHAT_CHAR_TOTAL) {
+    if (newTotal >= (chatSessionLimit ?? CHAT_CHAR_TOTAL)) {
       setTimeout(() => onChatLimitReached?.(), 1500);
     }
     setReplyingTo(null);
@@ -255,8 +269,9 @@ export const Chat: React.FC<ChatProps> = ({
                         <CheckCheck className="w-3 h-3 text-emerald-300" />
   );
 
+  const effectiveLimit = chatSessionLimit ?? CHAT_CHAR_TOTAL;
   const msgCharsLeft = MSG_CHAR_LIMIT - inputText.length;
-  const chatCharsLeft = CHAT_CHAR_TOTAL - totalCharsUsed;
+  const chatCharsLeft = effectiveLimit - totalCharsUsed;
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden select-none"
@@ -273,16 +288,7 @@ export const Chat: React.FC<ChatProps> = ({
           if (!target.closest('[data-portal-menu]')) setMenuId(null);
         }}
       >
-        {/* Chat chars remaining indicator — always visible top right */}
-        <div className="sticky top-0 right-0 flex justify-end mb-1 pointer-events-none z-10">
-          <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full transition-all ${
-            chatCharsLeft <= 0 ? 'bg-red-500/20 text-red-400' :
-            chatCharsLeft <= 100 ? 'bg-neutral-800/90 text-yellow-400' :
-            'bg-neutral-900/60 text-neutral-600'
-          }`}>
-            {chatCharsLeft <= 0 ? 'Chat limit reached' : `${chatCharsLeft} chat chars left`}
-          </span>
-        </div>
+
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40">
             <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30

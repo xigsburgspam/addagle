@@ -87,12 +87,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
                 .catch(() => {});
               // Handle referral bonus
-              // Read from sessionStorage because Google OAuth redirect wipes the URL params
+              // signInWithPopup keeps the URL intact, so read ?ref= directly
               try {
-                const urlRef = new URLSearchParams(window.location.search).get('ref');
-                if (urlRef) sessionStorage.setItem('pendingRef', urlRef);
-                const refCode = sessionStorage.getItem('pendingRef');
-                sessionStorage.removeItem('pendingRef');
+                const refCode = new URLSearchParams(window.location.search).get('ref');
                 if (refCode && refCode !== inviteCode) {
                   const refSnap = await getDocs(query(collection(db, 'users'), where('inviteCode', '==', refCode)));
                   if (!refSnap.empty) {

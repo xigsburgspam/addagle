@@ -194,9 +194,6 @@ export const HomePage: React.FC<{
 
   const handleLogin = async () => {
     try {
-      // Save ?ref= param before Google OAuth redirect wipes the URL
-      const refCode = new URLSearchParams(window.location.search).get('ref');
-      if (refCode) sessionStorage.setItem('pendingRef', refCode);
       await signInWithPopup(auth, googleProvider);
     } catch (e) {
       console.error('Login failed:', e);
