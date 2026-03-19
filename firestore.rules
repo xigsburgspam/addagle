@@ -64,13 +64,13 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role', 'videoCount', 'lastVideoDate']) &&
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
              data.uid is string &&
              data.email is string &&
              data.role in ['admin', 'user'] &&
              (!('isBlocked' in data) || data.isBlocked is bool) &&
-             data.videoCount is int &&
-             data.lastVideoDate is string &&
+             (!('videoCount' in data) || data.videoCount is int) &&
+             (!('lastVideoDate' in data) || data.lastVideoDate is string) &&
              (!('savedDisplayName' in data) || data.savedDisplayName is string || data.savedDisplayName == null) &&
              (!('hasSavedName' in data) || data.hasSavedName is bool);
     }

@@ -6,6 +6,7 @@ import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../f
 import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
+import { AccountSection } from './AccountSection';
 import { containsBanned } from '../constants';
 
 const BANGLADESH_DISTRICTS = [
@@ -108,6 +109,7 @@ export const HomePage: React.FC<{
   const { user, userData, loading, updateDisplayName, removeDisplayName } = useFirebase();
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: 'video' | 'text' | 'football' | 'custom' } | null>(null);
   const [stats, setStats] = useState({
@@ -180,7 +182,15 @@ export const HomePage: React.FC<{
     }
   };
 
-  const handleAction = (type: 'video' | 'text' | 'football' | 'custom') => {
+  const handleAction = async (type: 'video' | 'text' | 'football' | 'custom') => {
+    if (type === 'video') {
+       const res = await fetch(`/api/user/stats?uid=${user?.uid}`);
+       const data = await res.json();
+       if (data.remaining <= 0) {
+         alert('You have reached your daily video chat limit.');
+         return;
+       }
+    }
     if (userData?.hasSavedName && userData?.savedDisplayName) {
       executeAction(type, userData.savedDisplayName);
     } else {
@@ -355,6 +365,13 @@ export const HomePage: React.FC<{
                     <span className="text-[10px] font-black uppercase tracking-widest">Change Name</span>
                   </button>
                   <button
+                    onClick={() => setShowAccount(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
+                  >
+                    <UserCheck className="w-3 h-3" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Account</span>
+                  </button>
+                  <button
                     onClick={() => removeDisplayName()}
                     className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-red-400 transition-all group"
                   >
@@ -463,6 +480,9 @@ export const HomePage: React.FC<{
       <AnimatePresence>
         {isAdminPopupOpen && (
           <AdminPopup isOpen={isAdminPopupOpen} onClose={() => setIsAdminPopupOpen(false)} />
+        )}
+        {showAccount && (
+          <AccountSection onClose={() => setShowAccount(false)} />
         )}
         {showNamePrompt && (
           <DisplayNamePrompt

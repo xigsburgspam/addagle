@@ -13,6 +13,10 @@ interface UserData {
   isEmailBlocked?: boolean;
   savedDisplayName?: string;
   hasSavedName?: boolean;
+  blockedUsers?: string[];
+  dailyVideoLimit?: number;
+  dailyVideoUsage?: number;
+  lastVideoDate?: string;
 }
 
 interface FirebaseContextType {
@@ -66,6 +70,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               photoURL: firebaseUser.photoURL || '',
               role: firebaseUser.email === 'edublitz71@gmail.com' ? 'admin' : 'user',
               isBlocked: false,
+              videoCount: 0,
+              lastVideoDate: '',
+              dailyVideoLimit: 60,
+              dailyVideoUsage: 0,
             };
             await setDoc(userDocRef, currentData).catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${firebaseUser.uid}`));
             await updateDoc(doc(db, 'stats', 'global'), {

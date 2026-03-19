@@ -106,6 +106,53 @@ async function startServer() {
     }
   });
 
+  // Blocked users
+  app.get('/api/user/blocked', async (req, res) => {
+    const uid = req.query.uid as string;
+    if (!uid) return res.status(400).send('Missing uid');
+    const userDoc = await adminDb.collection('users').doc(uid).get();
+    const userData = userDoc.data();
+    res.json(userData?.blockedUsers || []);
+  });
+
+  app.delete('/api/user/blocked/:blockedId', async (req, res) => {
+    const { uid } = req.body;
+    const { blockedId } = req.params;
+    if (!uid || !blockedId) return res.status(400).send('Missing uid or blockedId');
+    await adminDb.collection('users').doc(uid).update({
+      blockedUsers: FieldValue.arrayRemove(blockedId)
+    });
+    res.sendStatus(200);
+  });
+
+  // Video chat limits
+  app.get('/api/user/stats', async (req, res) => {
+    const uid = req.query.uid as string;
+    if (!uid) return res.status(400).send('Missing uid');
+    const userDoc = await adminDb.collection('users').doc(uid).get();
+    const userData = userDoc.data();
+    const limit = userData?.dailyVideoLimit || 30;
+    const usage = userData?.dailyVideoUsage || 0;
+    const lastDate = userData?.lastVideoDate || new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    
+    let currentUsage = usage;
+    if (lastDate !== today) {
+        currentUsage = 0;
+    }
+
+    res.json({ limit, remaining: Math.max(0, limit - Math.floor(currentUsage / 60)) });
+  });
+
+  app.post('/api/admin/user/limit', async (req, res) => {
+    const { adminUid, targetUid, newLimit } = req.body;
+    // Basic admin check (should be more robust)
+    if (adminUid !== 'edublitz71@gmail.com') return res.status(403).send('Unauthorized');
+    
+    await adminDb.collection('users').doc(targetUid).set({ dailyVideoLimit: newLimit }, { merge: true });
+    res.sendStatus(200);
+  });
+
   // Matchmaking queues
   let waitingVideoUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
   let waitingTextUser: { socketId: string, peerId: string, uid: string, email: string, isAdmin: boolean } | null = null;
@@ -477,37 +524,33 @@ async function startServer() {
               const partnerUid = partnerSocket ? (partnerSocket as any)._uid : null;
               const partnerIsAdmin = partnerSocket ? (partnerSocket as any)._isAdmin : false;
 
+              const today = new Date().toISOString().split('T')[0];
+
               if (myUid && !myIsAdmin) {
-                const today = new Date().toISOString().split('T')[0];
-                let stats = userVideoChatStats.get(myUid);
-                if (!stats || stats.lastDate !== today) {
-                  const userDoc = await adminDb.collection('users').doc(myUid).get();
+                const userRef = adminDb.collection('users').doc(myUid);
+                await adminDb.runTransaction(async (transaction) => {
+                  const userDoc = await transaction.get(userRef);
                   const userData = userDoc.data();
-                  if (userData && userData.lastVideoDate === today) {
-                    stats = { count: userData.videoCount || 0, lastDate: today };
-                  } else {
-                    stats = { count: 0, lastDate: today };
-                  }
-                }
-                stats.count++;
-                userVideoChatStats.set(myUid, stats);
-                adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                  const lastDate = userData?.lastVideoDate || '';
+                  const currentUsage = lastDate === today ? (userData?.dailyVideoUsage || 0) : 0;
+                  transaction.update(userRef, {
+                    dailyVideoUsage: currentUsage + duration,
+                    lastVideoDate: today
+                  });
+                });
               }
               if (partnerUid && !partnerIsAdmin) {
-                const today = new Date().toISOString().split('T')[0];
-                let stats = userVideoChatStats.get(partnerUid);
-                if (!stats || stats.lastDate !== today) {
-                  const userDoc = await adminDb.collection('users').doc(partnerUid).get();
-                  const userData = userDoc.data();
-                  if (userData && userData.lastVideoDate === today) {
-                    stats = { count: userData.videoCount || 0, lastDate: today };
-                  } else {
-                    stats = { count: 0, lastDate: today };
-                  }
-                }
-                stats.count++;
-                userVideoChatStats.set(partnerUid, stats);
-                adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                const partnerRef = adminDb.collection('users').doc(partnerUid);
+                await adminDb.runTransaction(async (transaction) => {
+                  const partnerDoc = await transaction.get(partnerRef);
+                  const partnerData = partnerDoc.data();
+                  const lastDate = partnerData?.lastVideoDate || '';
+                  const currentUsage = lastDate === today ? (partnerData?.dailyVideoUsage || 0) : 0;
+                  transaction.update(partnerRef, {
+                    dailyVideoUsage: currentUsage + duration,
+                    lastVideoDate: today
+                  });
+                });
               }
             }
             activeMatchStartTimes.delete(roomId);
@@ -816,37 +859,33 @@ async function startServer() {
               const partnerUid = partnerSocket ? (partnerSocket as any)._uid : null;
               const partnerIsAdmin = partnerSocket ? (partnerSocket as any)._isAdmin : false;
 
+              const today = new Date().toISOString().split('T')[0];
+
               if (myUid && !myIsAdmin) {
-                const today = new Date().toISOString().split('T')[0];
-                let stats = userVideoChatStats.get(myUid);
-                if (!stats || stats.lastDate !== today) {
-                  const userDoc = await adminDb.collection('users').doc(myUid).get();
+                const userRef = adminDb.collection('users').doc(myUid);
+                await adminDb.runTransaction(async (transaction) => {
+                  const userDoc = await transaction.get(userRef);
                   const userData = userDoc.data();
-                  if (userData && userData.lastVideoDate === today) {
-                    stats = { count: userData.videoCount || 0, lastDate: today };
-                  } else {
-                    stats = { count: 0, lastDate: today };
-                  }
-                }
-                stats.count++;
-                userVideoChatStats.set(myUid, stats);
-                adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                  const lastDate = userData?.lastVideoDate || '';
+                  const currentUsage = lastDate === today ? (userData?.dailyVideoUsage || 0) : 0;
+                  transaction.update(userRef, {
+                    dailyVideoUsage: currentUsage + duration,
+                    lastVideoDate: today
+                  });
+                });
               }
               if (partnerUid && !partnerIsAdmin) {
-                const today = new Date().toISOString().split('T')[0];
-                let stats = userVideoChatStats.get(partnerUid);
-                if (!stats || stats.lastDate !== today) {
-                  const userDoc = await adminDb.collection('users').doc(partnerUid).get();
-                  const userData = userDoc.data();
-                  if (userData && userData.lastVideoDate === today) {
-                    stats = { count: userData.videoCount || 0, lastDate: today };
-                  } else {
-                    stats = { count: 0, lastDate: today };
-                  }
-                }
-                stats.count++;
-                userVideoChatStats.set(partnerUid, stats);
-                adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                const partnerRef = adminDb.collection('users').doc(partnerUid);
+                await adminDb.runTransaction(async (transaction) => {
+                  const partnerDoc = await transaction.get(partnerRef);
+                  const partnerData = partnerDoc.data();
+                  const lastDate = partnerData?.lastVideoDate || '';
+                  const currentUsage = lastDate === today ? (partnerData?.dailyVideoUsage || 0) : 0;
+                  transaction.update(partnerRef, {
+                    dailyVideoUsage: currentUsage + duration,
+                    lastVideoDate: today
+                  });
+                });
               }
             }
             activeMatchStartTimes.delete(roomId);
