@@ -22,6 +22,13 @@ interface VideoChatProps {
 export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) => {
   const { user, userData } = useFirebase();
   const isAdmin = user?.email === 'edublitz71@gmail.com';
+
+  // ── Token system ────────────────────────────────────────────────────────────
+  const tokensRef = useRef<number>(userData?.tokens ?? 100);
+  useEffect(() => { tokensRef.current = userData?.tokens ?? 100; }, [userData?.tokens]);
+  const tokens = userData?.tokens ?? 100;
+  const videoCallCost = 7; // tokens per video call
+
   const { t } = useLanguage();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -58,110 +65,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | undefined>(undefined);
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-  const [sessionTimer, setSessionTimer] = useState<number>(mode === 'video' ? 300 : 420); // 5 or 7 minutes in seconds
-  const sessionTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ── Daily video limit ──────────────────────────────────────────────────────
-  // One persistent countdown starting at mount — NOT tied to isConnected.
-  // This means the clock keeps running between calls and never resets per-call.
-  const dailyUsageIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const dailyCountdownRef     = useRef<NodeJS.Timeout | null>(null);
-  const dailyLimitReachedRef  = useRef(false);
-  const limitMinutesRef       = useRef(userData?.dailyVideoLimit ?? 20);
-  const lastVideoDateRef      = useRef(userData?.lastVideoDate   ?? '');
-  const usageMinutesRef       = useRef<number>((() => {
-    const today = new Date().toISOString().split('T')[0];
-    return userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
-  })());
 
-  // Keep refs current whenever Firestore pushes updates
-  useEffect(() => { limitMinutesRef.current = userData?.dailyVideoLimit ?? 20; }, [userData?.dailyVideoLimit]);
-  useEffect(() => { lastVideoDateRef.current = userData?.lastVideoDate ?? ''; }, [userData?.lastVideoDate]);
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    usageMinutesRef.current = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
-  }, [userData?.dailyVideoUsage, userData?.lastVideoDate]);
-
-  // On-screen countdown state (seconds)
-  const [dailyRemainingSeconds, setDailyRemainingSeconds] = useState<number>(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const used  = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
-    return Math.max(0, ((userData?.dailyVideoLimit ?? 20) - used) * 60);
-  });
-  // Stable ref so interval reads latest value without re-creating itself
-  const dailyRemainingRef = useRef(dailyRemainingSeconds);
-  // Keep ref in sync if state is updated externally (e.g. new day detected)
-  useEffect(() => { dailyRemainingRef.current = dailyRemainingSeconds; }, [dailyRemainingSeconds]);
-
-  // Mount-time effect: runs once, independent of isConnected
-  useEffect(() => {
-    if (mode !== 'video' || isAdmin || !user) return;
-
-    // Per-second display tick
-    dailyCountdownRef.current = setInterval(() => {
-      const next = Math.max(0, dailyRemainingRef.current - 1);
-      dailyRemainingRef.current = next;
-      setDailyRemainingSeconds(next);
-
-      if (next <= 0 && !dailyLimitReachedRef.current) {
-        dailyLimitReachedRef.current = true;
-        clearInterval(dailyCountdownRef.current!);
-        clearInterval(dailyUsageIntervalRef.current!);
-        setConnectionError(`Daily limit reached (${limitMinutesRef.current} min). Try again tomorrow!`);
-        setTimeout(() => onExit(), 4000);
-      }
-    }, 1000);
-
-    // Persist to Firestore once per minute
-    dailyUsageIntervalRef.current = setInterval(async () => {
-      const today = new Date().toISOString().split('T')[0];
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        if (lastVideoDateRef.current !== today) {
-          await updateDoc(userRef, { dailyVideoUsage: 1, lastVideoDate: today });
-          usageMinutesRef.current  = 1;
-          lastVideoDateRef.current = today;
-        } else {
-          const newUsage = usageMinutesRef.current + 1;
-          await updateDoc(userRef, { dailyVideoUsage: newUsage });
-          usageMinutesRef.current = newUsage;
-        }
-      } catch (e) { console.error('Failed to persist daily usage', e); }
-    }, 60000);
-
-    return () => {
-      clearInterval(dailyCountdownRef.current!);
-      clearInterval(dailyUsageIntervalRef.current!);
-    };
-  }, [mode, isAdmin, user]); // ← NO isConnected: runs the whole session
-
-  // Session timer (per-match countdown, not daily)
-  useEffect(() => {
-    if (isConnected) {
-      const initialTime = mode === 'video' ? 300 : 420;
-      setSessionTimer(initialTime);
-      sessionTimerIntervalRef.current = setInterval(() => {
-        setSessionTimer(prev => {
-          if (prev <= 1) {
-            if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current);
-            handleNext();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current);
-      setSessionTimer(mode === 'video' ? 300 : 420);
-    }
-    return () => { if (sessionTimerIntervalRef.current) clearInterval(sessionTimerIntervalRef.current); };
-  }, [isConnected, mode]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const draggableRef = useRef<HTMLDivElement>(null);
@@ -295,6 +200,15 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       partnerUidRef.current = partnerUid;
       partnerEmailRef.current = partnerEmail;
 
+      // Deduct tokens for video call (only once per match, by initiator)
+      if (initiator && mode === 'video' && !isAdmin && user) {
+        const newTokens = Math.max(0, tokensRef.current - videoCallCost);
+        tokensRef.current = newTokens;
+        try {
+          await updateDoc(doc(db, 'users', user.uid), { tokens: newTokens });
+        } catch (e) { console.error('Token deduction failed', e); }
+      }
+
       if (initiator) {
         try {
           const statField = mode === 'video' ? 'totalVideoChats' : 'totalTextChats';
@@ -338,7 +252,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     socket.on('partner-disconnected', () => {
       playDisconnectSound();
       handleDisconnect('Partner disconnected');
-      setTimeout(() => findNextRef.current(), 1500);
+      // Auto-find next node immediately when partner exits
+      findNextRef.current();
     });
 
     socket.on('reaction', (data) => {
@@ -356,9 +271,8 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
     socket.on('limit-reached', () => {
       setIsSearching(false);
-      const lim = userData?.dailyVideoLimit ?? 20;
-      setConnectionError(`Daily video chat limit reached (${lim} min). Try again tomorrow!`);
-      setTimeout(() => onExit(), 5000);
+      setConnectionError(`Not enough tokens to start a video call. You need ${videoCallCost} tokens.`);
+      setTimeout(() => onExit(), 4000);
     });
 
     return () => {
@@ -510,11 +424,13 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     if (!socket) return;
     if (mode === 'video' && !videoEnabled) return;
 
-    // Client-side daily minutes limit check (use refs — never stale)
-    if (mode === 'video' && !isAdmin && dailyRemainingRef.current <= 0) {
-      setConnectionError(`Daily video chat limit reached (${limitMinutesRef.current} min). Try again tomorrow!`);
-      setTimeout(() => onExit(), 5000);
-      return;
+    // Token check: 7 tokens per video call
+    if (mode === 'video' && !isAdmin) {
+      if (tokensRef.current < videoCallCost) {
+        setConnectionError(`Not enough tokens! You need ${videoCallCost} tokens per video call. You have ${tokensRef.current} left.`);
+        setTimeout(() => onExit(), 5000);
+        return;
+      }
     }
 
     if (mode === 'video') {
@@ -921,31 +837,22 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
           <StatsDisplay mode={mode} />
 
-          {mode === 'video' && !isAdmin && (() => {
-            const totalSec = limitMinutesRef.current * 60;
-            const usedSec  = totalSec - dailyRemainingSeconds;
-            const pct      = Math.min(100, Math.round((usedSec / totalSec) * 100));
-            const barColor = dailyRemainingSeconds <= 300 ? '#ef4444' : dailyRemainingSeconds <= 600 ? '#f59e0b' : '#10b981';
-            const mins = Math.floor(dailyRemainingSeconds / 60);
-            const secs = dailyRemainingSeconds % 60;
-            const label = `${mins}:${String(secs).padStart(2,'0')}`;
-            return (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border"
-                style={{ background: 'rgba(16,185,129,0.04)', borderColor: dailyRemainingSeconds <= 300 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.12)' }}>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[8px] font-black uppercase tracking-widest leading-none"
-                    style={{ color: 'rgba(16,185,129,0.5)' }}>Daily Left</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-14 sm:w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
-                      <div className="h-full rounded-full transition-all duration-1000"
-                        style={{ width: `${100 - pct}%`, background: barColor }} />
-                    </div>
-                    <span className="text-[11px] font-black tabular-nums" style={{ color: barColor }}>{label}</span>
-                  </div>
+          {mode === 'video' && !isAdmin && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border"
+              style={{ background: 'rgba(16,185,129,0.04)', borderColor: tokens < videoCallCost ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.12)' }}>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-black uppercase tracking-widest leading-none"
+                  style={{ color: 'rgba(16,185,129,0.5)' }}>Tokens</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[14px] font-black tabular-nums leading-none"
+                    style={{ color: tokens < videoCallCost ? '#ef4444' : tokens < 20 ? '#f59e0b' : '#10b981' }}>
+                    {tokens}
+                  </span>
+                  <span className="text-[9px] text-neutral-500 font-bold">/{videoCallCost} per call</span>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
@@ -962,23 +869,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-neutral-950">
-        {/* Global Session Timer */}
-        <AnimatePresence>
-          {isConnected && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute top-4 left-4 z-[60]"
-            >
-              <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-md border border-white/10 rounded-full shadow-lg">
-                <div className={`w-2 h-2 rounded-full ${sessionTimer < 30 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                <span className={`text-xs font-mono font-bold ${sessionTimer < 30 ? 'text-red-500' : 'text-white'}`}>
-                  {formatTime(sessionTimer)}
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Video Section */}
         {mode === 'video' ? (
@@ -1193,7 +1083,7 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
                       disabled={!isConnected && !isSearching}
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-black disabled:opacity-30 disabled:cursor-not-allowed rounded-lg font-black text-xs uppercase tracking-widest transition-all"
                     >
-                      {t.nextNode}
+                      Skip
                       <SkipForward className="w-3 h-3" />
                     </button>
                     {isConnected && (

@@ -183,12 +183,17 @@ export const HomePage: React.FC<{
   };
 
   const handleAction = async (type: 'video' | 'text' | 'football' | 'custom') => {
-    if (type === 'video' && !userData?.role?.includes('admin')) {
-      const today = new Date().toISOString().split('T')[0];
-      const usage = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
-      const limit = userData?.dailyVideoLimit ?? 20;
-      if (usage >= limit) {
-        alert(`You have reached your daily video chat limit (${limit} min). Try again tomorrow!`);
+    if (type === 'video' && userData?.role !== 'admin') {
+      const userTokens = userData?.tokens ?? 100;
+      if (userTokens < 7) {
+        alert(`Not enough tokens! You need 7 tokens per video call. You have ${userTokens} tokens.`);
+        return;
+      }
+    }
+    if (type === 'custom' && userData?.role !== 'admin') {
+      const userTokens = userData?.tokens ?? 100;
+      if (userTokens < 4) {
+        alert(`Not enough tokens! You need 4 tokens to join a custom chat room. You have ${userTokens} tokens.`);
         return;
       }
     }
@@ -297,20 +302,19 @@ export const HomePage: React.FC<{
                   </div>
                 ) : (
                   <>{(() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const videoUsed = userData?.lastVideoDate === today ? (userData?.dailyVideoUsage ?? 0) : 0;
-                      const videoLimit = userData?.dailyVideoLimit ?? 20;
-                      const videoLimitReached = userData?.role !== 'admin' && videoUsed >= videoLimit;
+                      const userTokens = userData?.tokens ?? 100;
+                      const noTokens = userData?.role !== 'admin' && userTokens < 7;
                       return (
                     <button
                       onClick={() => handleAction('video')}
-                      disabled={videoLimitReached}
+                      disabled={noTokens}
+                      title={noTokens ? `Not enough tokens (need 7, have ${userTokens})` : ''}
                       className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:from-neutral-700 disabled:to-neutral-800 disabled:text-neutral-400 disabled:shadow-none"
                     >
                       <div className="flex flex-col items-center">
                         <div className="flex items-center gap-3">
-                          {videoLimitReached ? 'Daily Limit Reached' : t.startEncounter}
-                          {!videoLimitReached && <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />}
+                          {noTokens ? `Not Enough Tokens (${userTokens}/7)` : t.startEncounter}
+                          {!noTokens && <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />}
                         </div>
                       </div>
                     </button>

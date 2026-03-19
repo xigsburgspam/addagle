@@ -13,9 +13,7 @@ interface User {
   displayName?: string;
   role: string;
   isBlocked: boolean;
-  dailyVideoLimit?: number;
-  dailyVideoUsage?: number;
-  lastVideoDate?: string;
+  tokens?: number;
 }
 
 interface Report {
@@ -151,10 +149,22 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const updateLimit = async (targetUid: string, newLimit: number) => {
-    if (isNaN(newLimit) || newLimit < 1) return;
+  const updateTokens = async (targetUid: string, delta: number) => {
+    const target = users.find(u => u.uid === targetUid);
+    if (!target) return;
+    const current = target.tokens ?? 100;
+    const newVal = Math.max(0, current + delta);
     try {
-      await updateDoc(doc(db, 'users', targetUid), { dailyVideoLimit: newLimit });
+      await updateDoc(doc(db, 'users', targetUid), { tokens: newVal });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${targetUid}`);
+    }
+  };
+
+  const setTokens = async (targetUid: string, newVal: number) => {
+    if (isNaN(newVal) || newVal < 0) return;
+    try {
+      await updateDoc(doc(db, 'users', targetUid), { tokens: newVal });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${targetUid}`);
     }
@@ -445,22 +455,33 @@ export const AdminPanel: React.FC = () => {
                         <div className="flex items-center gap-8">
                           <div className="text-right">
 
-                            <p className="text-[8px] font-mono text-neutral-600 mt-1 uppercase tracking-widest">
-                              Last: {user.lastVideoDate || 'Never'}
-                            </p>
+
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Daily Limit (min)</span>
-                              <input
-                                type="number"
-                                defaultValue={user.dailyVideoLimit ?? 20}
-                                min={1}
-                                max={1440}
-                                className="w-20 bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-center text-sm text-white"
-                                onBlur={(e) => updateLimit(user.uid, parseInt(e.target.value))}
-                              />
-                              <span className="text-[8px] text-neutral-600">{user.dailyVideoUsage ?? 0} used today</span>
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <span className="text-[8px] font-black uppercase tracking-widest text-neutral-500">Tokens</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => updateTokens(user.uid, -10)}
+                                  className="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white font-black text-sm transition-all flex items-center justify-center"
+                                >−</button>
+                                <input
+                                  type="number"
+                                  value={user.tokens ?? 100}
+                                  min={0}
+                                  onChange={() => {}}
+                                  onBlur={(e) => setTokens(user.uid, parseInt(e.target.value))}
+                                  className="w-16 bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-center text-sm text-emerald-400 font-black"
+                                />
+                                <button
+                                  onClick={() => updateTokens(user.uid, 10)}
+                                  className="w-7 h-7 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white font-black text-sm transition-all flex items-center justify-center"
+                                >+</button>
+                              </div>
+                              <div className="flex gap-1 mt-0.5">
+                                <button onClick={() => setTokens(user.uid, 100)} className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-neutral-800 hover:bg-emerald-500/20 text-neutral-500 hover:text-emerald-400 rounded-md transition-all">Reset 100</button>
+                                <button onClick={() => setTokens(user.uid, 0)} className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-neutral-800 hover:bg-red-500/20 text-neutral-500 hover:text-red-400 rounded-md transition-all">Zero</button>
+                              </div>
                             </div>
                             {!user.isBlocked ? (
                               <button onClick={() => blockUser(user.id, user.email)}

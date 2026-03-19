@@ -69,8 +69,7 @@ service cloud.firestore {
              data.email is string &&
              data.role in ['admin', 'user'] &&
              (!('isBlocked' in data) || data.isBlocked is bool) &&
-             (!('videoCount' in data) || data.videoCount is int) &&
-             (!('lastVideoDate' in data) || data.lastVideoDate is string) &&
+             (!('tokens' in data) || data.tokens is int) &&
              (!('savedDisplayName' in data) || data.savedDisplayName is string || data.savedDisplayName == null) &&
              (!('hasSavedName' in data) || data.hasSavedName is bool);
     }
@@ -103,9 +102,7 @@ service cloud.firestore {
                     (request.resource.data.role == 'user' || (request.resource.data.role == 'admin' && request.auth.token.email == "edublitz71@gmail.com"));
       allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && 
                     request.resource.data.role == resource.data.role && 
-                    request.resource.data.isBlocked == resource.data.isBlocked &&
-                    (!('videoCount' in request.resource.data) || request.resource.data.videoCount == resource.data.videoCount) &&
-                    (!('lastVideoDate' in request.resource.data) || request.resource.data.lastVideoDate == resource.data.lastVideoDate)));
+                    request.resource.data.isBlocked == resource.data.isBlocked));
     }
 
     match /reports/{reportId} {

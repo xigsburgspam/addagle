@@ -87,8 +87,6 @@ export const AccountSection: React.FC<AccountSectionProps> = ({ onClose }) => {
   };
 
   const displayedName = userData?.savedDisplayName || userData?.displayName || user?.displayName || 'Anonymous';
-  const videoUsage = userData?.dailyVideoUsage ?? 0;
-  const videoLimit = userData?.dailyVideoLimit ?? 60;
   const videoPercent = Math.min(100, Math.round((videoUsage / videoLimit) * 100));
 
   return (
@@ -212,21 +210,27 @@ export const AccountSection: React.FC<AccountSectionProps> = ({ onClose }) => {
                 )}
               </div>
 
-              {/* Video usage */}
+              {/* Token balance */}
               <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <Video size={15} className="text-emerald-400" />
-                  <span className="text-neutral-400 text-sm">Daily Video Chat</span>
-                  <span className="ml-auto text-xs text-neutral-500">{videoUsage}/{videoLimit} min</span>
+                  <span className="text-neutral-400 text-sm">Tokens</span>
+                  <span className="ml-auto text-xs font-black"
+                    style={{ color: (userData?.tokens ?? 100) < 7 ? '#ef4444' : (userData?.tokens ?? 100) < 20 ? '#f59e0b' : '#10b981' }}>
+                    {userData?.tokens ?? 100}
+                  </span>
                 </div>
                 <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
                   <div className="h-full rounded-full transition-all"
                     style={{
-                      width: `${videoPercent}%`,
-                      background: videoPercent > 80 ? '#ef4444' : videoPercent > 50 ? '#f59e0b' : '#10b981'
+                      width: `${Math.min(100, Math.round(((userData?.tokens ?? 100) / 100) * 100))}%`,
+                      background: (userData?.tokens ?? 100) < 7 ? '#ef4444' : (userData?.tokens ?? 100) < 20 ? '#f59e0b' : '#10b981'
                     }} />
                 </div>
-                <p className="text-xs text-neutral-500 mt-2">{Math.max(0, videoLimit - videoUsage)} minutes remaining today</p>
+                <div className="flex justify-between mt-2">
+                  <p className="text-xs text-neutral-500">7 tokens = 1 video call</p>
+                  <p className="text-xs text-neutral-500">4 tokens = 1 custom chat</p>
+                </div>
               </div>
 
               {/* Email */}
