@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Send, Maximize2, Minimize2, ArrowLeft, Users } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import Hls from 'hls.js';
+import { Send, ArrowLeft, Users, ExternalLink, Tv2 } from 'lucide-react';
+import { motion } from 'motion/react';
 
 import { getDistrict } from '../utils/location';
-
-import { BANNED_WORDS, containsBanned } from '../constants';
+import { containsBanned } from '../constants';
 
 const CHAT_LIMIT = 200;
 
@@ -38,59 +36,11 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const [memberCount, setMemberCount] = useState(0);
   const [inputText,   setInputText]   = useState('');
   const [inputError,  setInputError]  = useState('');
-  const [fullscreen,  setFullscreen]  = useState(false);
-  const [streamInPopup, setStreamInPopup] = useState(false);
-  const [useProxy, setUseProxy] = useState(false);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const scrollRef    = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const iframeRef    = useRef<HTMLIFrameElement>(null);
-  const videoRef     = useRef<HTMLVideoElement>(null);
   const typingTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const isM3u8 = match.streamUrl.toLowerCase().includes('.m3u8');
-  const isYouTube = match.streamUrl.includes('youtube.com') || match.streamUrl.includes('youtu.be');
-
-  const getYouTubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
-
-  const youtubeId = isYouTube ? getYouTubeId(match.streamUrl) : null;
-
-  useEffect(() => {
-    if (!isM3u8 || streamInPopup || !videoRef.current) return;
-
-    let hls: Hls | null = null;
-    const video = videoRef.current;
-
-    if (Hls.isSupported()) {
-      hls = new Hls({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 600,
-      });
-      hls.loadSource(match.streamUrl);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(e => console.log('Auto-play prevented', e));
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari support
-      video.src = match.streamUrl;
-      video.addEventListener('loadedmetadata', () => {
-        video.play().catch(e => console.log('Auto-play prevented', e));
-      });
-    }
-
-    return () => {
-      if (hls) {
-        hls.destroy();
-      }
-    };
-  }, [match.streamUrl, isM3u8, streamInPopup]);
 
   const clearTypingFor = (name: string) => {
     if (typingTimers.current[name]) clearTimeout(typingTimers.current[name]);
@@ -98,9 +48,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
     setTypingUsers(p => p.filter(n => n !== name));
   };
 
-  const addEntry = (entry: ChatEntry) => {
-    setEntries(p => [...p, entry]);
-  };
+  const addEntry = (entry: ChatEntry) => setEntries(p => [...p, entry]);
 
   useEffect(() => {
     const sock = io({ forceNew: true });
@@ -108,19 +56,14 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
 
     const onConnect = () => {
       sock.emit('football-join', { matchId: match.id, name: userName });
-      getDistrict().then(district => {
-        sock.emit('set-district', { district });
-      }).catch(() => {});
+      getDistrict().then(district => sock.emit('set-district', { district })).catch(() => {});
     };
 
-    if (sock.connected) {
-      onConnect();
-    } else {
-      sock.once('connect', onConnect);
-    }
+    if (sock.connected) onConnect();
+    else sock.once('connect', onConnect);
 
     sock.on('football-chat', ({ name, text, ts }: { name: string; text: string; ts: number }) => {
-      if (name === userName) return; // Don't add own message twice
+      if (name === userName) return;
       addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name, text, ts });
       clearTypingFor(name);
     });
@@ -136,21 +79,15 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
       typingTimers.current[name] = setTimeout(() => clearTypingFor(name), 3000);
     });
 
-    sock.on('football-typing-stop', ({ name }: { name: string }) => {
-      clearTypingFor(name);
-    });
+    sock.on('football-typing-stop', ({ name }: { name: string }) => clearTypingFor(name));
 
-    sock.on('football-member-count', ({ count }: { count: number }) => {
-      setMemberCount(count);
-    });
+    sock.on('football-member-count', ({ count }: { count: number }) => setMemberCount(count));
 
     return () => { sock.disconnect(); };
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [entries, typingUsers]);
 
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,9 +96,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
     if (!socket) return;
     socket.emit('football-typing-start', { matchId: match.id });
     if (typingTimer.current) clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
-      socket?.emit('football-typing-stop', { matchId: match.id });
-    }, 2000);
+    typingTimer.current = setTimeout(() => socket?.emit('football-typing-stop', { matchId: match.id }), 2000);
   };
 
   const send = useCallback(() => {
@@ -169,7 +104,6 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
     if (!trimmed || !socket) return;
     if (trimmed.length > CHAT_LIMIT) { setInputError(`Max ${CHAT_LIMIT} characters.`); return; }
     if (containsBanned(trimmed)) { setInputError('Message contains prohibited words.'); return; }
-
     socket.emit('football-message', { matchId: match.id, text: trimmed });
     addEntry({ id: Math.random().toString(36).slice(2), type: 'msg', name: userName, text: trimmed, ts: Date.now() });
     setInputText('');
@@ -177,37 +111,21 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
     socket.emit('football-typing-stop', { matchId: match.id });
   }, [inputText, socket, match.id, userName]);
 
-  const toggleFullscreen = async () => {
-    if (!document.fullscreenElement) {
-      try {
-        await containerRef.current?.requestFullscreen();
-        setFullscreen(true);
-        try { await (screen.orientation as any).lock('landscape'); } catch {}
-      } catch {}
-    } else {
-      await document.exitFullscreen();
-      setFullscreen(false);
-      try { (screen.orientation as any).unlock(); } catch {}
-    }
+  const openStream = () => {
+    window.open(match.streamUrl, '_blank', 'noopener,noreferrer');
   };
-
-  useEffect(() => {
-    const onFSChange = () => setFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFSChange);
-    return () => document.removeEventListener('fullscreenchange', onFSChange);
-  }, []);
 
   const charsLeft = CHAT_LIMIT - inputText.length;
 
   return (
-    <div ref={containerRef} className="flex flex-col h-[100dvh] w-full bg-[#0d0e11] text-white overflow-hidden">
+    <div className="flex flex-col h-[100dvh] w-full bg-[#0d0e11] text-white overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] shrink-0"
            style={{ background: '#13151a' }}>
         <div className="flex items-center gap-3">
           <button onClick={onLeave}
-            className="w-8 h-8 rounded-full bg-white/6 hover:bg-white/12 flex items-center justify-center transition-colors cursor-pointer">
+            className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors cursor-pointer">
             <ArrowLeft className="w-4 h-4 text-neutral-400" />
           </button>
           <div>
@@ -222,105 +140,55 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
             </p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <Users className="w-2.5 h-2.5 text-emerald-500" />
-              <span className="text-[10px] font-bold text-emerald-500">{memberCount} {memberCount === 1 ? 'member' : 'members'} present</span>
+              <span className="text-[10px] font-bold text-emerald-500">
+                {memberCount} {memberCount === 1 ? 'member' : 'members'} present
+              </span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.07] hidden sm:flex">
-            <Users className="w-3 h-3 text-neutral-500" />
-            <span className="text-[10px] font-semibold text-neutral-400">{userName}</span>
-          </div>
-          <button
-            onClick={() => {
-              window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
-              setStreamInPopup(true);
-            }}
-            className="px-3 py-1.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-widest transition-colors"
-          >
-            Pop Out
-          </button>
-          <button onClick={toggleFullscreen}
-            className="w-8 h-8 rounded-full bg-white/6 hover:bg-white/12 flex items-center justify-center transition-colors cursor-pointer">
-            {fullscreen ? <Minimize2 className="w-4 h-4 text-neutral-400" /> : <Maximize2 className="w-4 h-4 text-neutral-400" />}
-          </button>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.07] hidden sm:flex">
+          <Users className="w-3 h-3 text-neutral-500" />
+          <span className="text-[10px] font-semibold text-neutral-400">{userName}</span>
         </div>
       </div>
 
-      {/* Stream — top 45% */}
-      {!streamInPopup ? (
-        <div className="shrink-0 w-full bg-black relative group" style={{ height: '45%' }}>
-          {isM3u8 ? (
-            <video
-              ref={videoRef}
-              className="w-full h-full object-contain bg-black"
-              controls
-              playsInline
-              autoPlay
-            />
-          ) : isYouTube && youtubeId ? (
-            <iframe
-              src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&controls=0&modestbranding=1&rel=0&showinfo=0`}
-              className="w-full h-full border-0"
-              allowFullScreen
-              allow="autoplay; fullscreen; encrypted-media"
-              title="Match Stream"
-            />
-          ) : (
-            <iframe
-              ref={iframeRef}
-              src={useProxy ? `/api/proxy-stream?url=${encodeURIComponent(match.streamUrl)}` : match.streamUrl}
-              className="w-full h-full border-0"
-              allowFullScreen
-              allow="autoplay; fullscreen; encrypted-media"
-              title="Match Stream"
-            />
-          )}
-          
-          {/* Overlay for anti-iframe fallback */}
-          {!isM3u8 && !isYouTube && (
-            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <div className="bg-neutral-900/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center max-w-xs pointer-events-auto shadow-2xl">
-                <p className="text-xs text-neutral-300 mb-3 leading-relaxed">
-                  If the video is blank or refusing to connect (anti-iframe protection), you can try the proxy player or open it in a separate popup window.
-                </p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => setUseProxy(!useProxy)}
-                    className="w-full py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
-                  >
-                    {useProxy ? 'Use Standard Player' : 'Try Proxy Player (Bypass)'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.open(match.streamUrl, 'FootballStream', 'width=800,height=600,menubar=no,toolbar=no,location=no,status=no');
-                      setStreamInPopup(true);
-                    }}
-                    className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
-                  >
-                    Open Stream in Popup
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+      {/* Stream area — pop-out button only */}
+      <div className="shrink-0 w-full flex flex-col items-center justify-center gap-5 py-10 px-6"
+           style={{ background: 'linear-gradient(180deg,#13151a 0%,#0d0e11 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+
+        {/* Match badge */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/25">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">Live · {match.league}</span>
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-white text-center">
+            {match.teamA} <span className="text-neutral-600 font-normal mx-1">vs</span> {match.teamB}
+          </p>
         </div>
-      ) : (
-        <div className="shrink-0 w-full bg-neutral-900 flex flex-col items-center justify-center p-4 border-b border-white/[0.07]">
-          <p className="text-xs text-neutral-400 mb-3">Stream is playing in a popup window.</p>
-          <button
-            onClick={() => setStreamInPopup(false)}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors"
-          >
-            Bring Stream Back
-          </button>
-        </div>
-      )}
+
+        {/* Watch button */}
+        <motion.button
+          onClick={openStream}
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.97 }}
+          className="flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl transition-all"
+          style={{ background: 'linear-gradient(135deg,#10b981,#059669)', color: '#000', boxShadow: '0 0 40px rgba(16,185,129,0.3)' }}
+        >
+          <Tv2 className="w-5 h-5" />
+          Watch Stream
+          <ExternalLink className="w-4 h-4 opacity-70" />
+        </motion.button>
+
+        <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">
+          Opens in a new tab
+        </p>
+      </div>
 
       <div className="h-px bg-white/[0.07] shrink-0" />
 
-      {/* Chat — bottom */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative bg-[#111214]">
+      {/* Chat */}
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-[#111214]">
         <div ref={scrollRef}
              className="flex-1 overflow-y-auto px-3 py-3 space-y-1"
              style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -337,15 +205,15 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
                   {entry.text}
                 </span>
               ) : (
-                <div className={`max-w-[85%] ${entry.name === userName ? 'items-end' : 'items-start'} flex flex-col`}>
+                <div className={`max-w-[85%] flex flex-col ${entry.name === userName ? 'items-end' : 'items-start'}`}>
                   {entry.name !== userName && (
                     <span className="text-[10px] font-bold text-neutral-500 ml-1 mb-0.5">{entry.name}</span>
                   )}
-                  <div className={`px-3.5 py-2 rounded-2xl text-[13.5px] leading-relaxed relative shadow-md ${
+                  <div className={`px-3.5 py-2 rounded-2xl text-[13.5px] leading-relaxed shadow-md ${
                     entry.name === userName
-                      ? 'bg-[#2b5c3f] text-white rounded-tr-sm shadow-emerald-950/50'
-                      : 'bg-[#1e2026] text-[#e8eaf0] rounded-tl-sm border border-white/[0.06] shadow-black/40'
-                  }`}>
+                      ? 'bg-[#2b5c3f] text-white rounded-tr-sm'
+                      : 'bg-[#1e2026] text-[#e8eaf0] rounded-tl-sm border border-white/[0.06]'
+                  }`} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     {entry.text}
                     <div className={`flex items-center gap-1 mt-1 ${entry.name === userName ? 'justify-end' : 'justify-start'}`}>
                       <span className="text-[9px] text-white/20">
@@ -357,6 +225,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
               )}
             </motion.div>
           ))}
+
           {typingUsers.length > 0 && (
             <div className="flex justify-start mt-2">
               <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#1e2026] border border-white/[0.06]">
@@ -375,10 +244,12 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
         </div>
 
         {/* Input */}
-        <div className="shrink-0 px-3 pb-3 pt-2 border-t border-white/[0.06] bg-[#161719]">
-          {inputError && <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-2 ml-1">{inputError}</p>}
+        <div className="shrink-0 px-3 pb-3 pt-2 border-t border-white/[0.06]" style={{ background: '#161719' }}>
+          {inputError && (
+            <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-2 ml-1">{inputError}</p>
+          )}
           <div className="flex items-end gap-2">
-            <div className="flex-1 flex items-end gap-2 px-3 py-2 rounded-[22px] bg-[#23262e] border border-white/[0.07] transition-all duration-200">
+            <div className="flex-1 flex items-end gap-2 px-3 py-2 rounded-[22px] bg-[#23262e] border border-white/[0.07]">
               <input
                 ref={inputRef}
                 type="text"
@@ -400,10 +271,11 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
               onClick={send}
               disabled={!inputText.trim()}
               whileTap={{ scale: 0.88 }}
-              className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer
-                ${inputText.trim()
+              className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                inputText.trim()
                   ? 'bg-emerald-500 shadow-lg shadow-emerald-900/60 hover:bg-emerald-400'
-                  : 'bg-[#23262e] border border-white/8 opacity-40 cursor-not-allowed'}`}
+                  : 'bg-[#23262e] border border-white/[0.08] opacity-40 cursor-not-allowed'
+              }`}
             >
               <Send className="w-4 h-4 text-white" strokeWidth={2.5} />
             </motion.button>

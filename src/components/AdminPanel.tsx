@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc, getDocs, arrayRemove, getDoc } from '../firebase';
-import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff, Users, Search, RotateCcw } from 'lucide-react';
+import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff, Users, Search, RotateCcw, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
@@ -14,6 +14,8 @@ interface User {
   role: string;
   isBlocked: boolean;
   tokens?: number;
+  totalReferrals?: number;
+  tempBlockedUntil?: number | null;
 }
 
 interface Report {
@@ -60,10 +62,14 @@ export const AdminPanel: React.FC = () => {
   const [activeRooms,  setActiveRooms]  = useState<ActiveRoom[]>([]);
   const [users,        setUsers]        = useState<User[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users' | 'announcements' | 'referrals'>('reports');
+  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users' | 'announcements' | 'referrals' | 'topup_packages'>('reports');
   const [referrals,     setReferrals]     = useState<any[]>([]);
   const [giftAmounts,   setGiftAmounts]   = useState<Record<string, number>>({});
   const [giftingId,     setGiftingId]     = useState<string | null>(null);
+  const [packages,      setPackages]      = useState<any[]>([]);
+  const [blockStats,    setBlockStats]    = useState({ totalBlocked: 0, totalTempBlocked: 0 });
+  const [newPkg,        setNewPkg]        = useState({ label: '', tokens: '', price: '', waLink: '', bestValue: false });
+  const [pkgLoading,    setPkgLoading]    = useState(false);
   const [giveAllAmount, setGiveAllAmount] = useState<number>(100);
   const [givingAll,     setGivingAll]     = useState(false);
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -74,7 +80,9 @@ export const AdminPanel: React.FC = () => {
   const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '' });
   const [addingMatch,  setAddingMatch]  = useState(false);
   const [matchMsg,     setMatchMsg]     = useState('');
-  const [userSearch,   setUserSearch]   = useState('');
+  const [userSearch,     setUserSearch]     = useState('');
+  const [referralFilter,  setReferralFilter]  = useState<'all' | 'has_referrals'>('all');
+  const [referralSort,    setReferralSort]    = useState<'none' | 'asc' | 'desc'>('none');
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -123,6 +131,25 @@ export const AdminPanel: React.FC = () => {
       setAnnouncements(data);
     });
 
+    // Block counters from stats/global
+    const statsRef = doc(db, 'stats', 'global');
+    const unsubStats = onSnapshot(statsRef, (snap) => {
+      if (snap.exists()) {
+        const d = snap.data();
+        setBlockStats({
+          totalBlocked:     d.totalBlocked     ?? 0,
+          totalTempBlocked: d.totalTempBlocked ?? 0,
+        });
+      }
+    });
+
+    const qPkg = query(collection(db, 'topup_packages'));
+    const unsubPkg = onSnapshot(qPkg, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a: any, b: any) => a.tokens - b.tokens);
+      setPackages(data);
+    });
+
     const qRef = query(collection(db, 'referrals'));
     const unsubReferrals = onSnapshot(qRef, (snapshot) => {
       const data = snapshot.docs
@@ -145,6 +172,8 @@ export const AdminPanel: React.FC = () => {
       unsubscribeUsers();
       unsubAnn();
       unsubReferrals();
+      unsubPkg();
+      unsubStats();
       clearInterval(roomInterval);
     };
   }, [isAdmin]);
@@ -171,12 +200,29 @@ export const AdminPanel: React.FC = () => {
   const blockUser = async (userId: string, email?: string) => {
     if (!confirm('Block this user permanently?')) return;
     try {
-      await updateDoc(doc(db, 'users', userId), { isBlocked: true });
+      await updateDoc(doc(db, 'users', userId), { isBlocked: true, tempBlockedUntil: null });
       if (email) {
         await setDoc(doc(db, 'blocked_emails', email), { blockedAt: Timestamp.now(), reason: 'Admin Blocked', uid: userId });
       } else {
         await setDoc(doc(db, 'blocked_emails', `uid:${userId}`), { blockedAt: Timestamp.now(), reason: 'Admin Blocked (UID)', uid: userId });
       }
+      // Increment permanent block counter
+      await updateDoc(doc(db, 'stats', 'global'), { totalBlocked: increment(1) });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
+  const tempBlockUser = async (userId: string, email?: string) => {
+    if (!confirm('Temporarily block this user for 6 hours?')) return;
+    const unblockAt = Date.now() + 6 * 60 * 60 * 1000; // 6 hours from now
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        isBlocked: true,
+        tempBlockedUntil: unblockAt,
+      });
+      // Increment temp block counter
+      await updateDoc(doc(db, 'stats', 'global'), { totalTempBlocked: increment(1) });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
     }
@@ -228,6 +274,27 @@ export const AdminPanel: React.FC = () => {
       setNewAnnBody('');
     } catch (e) { console.error('Post announcement failed', e); }
     setAnnLoading(false);
+  };
+
+  const addPackage = async () => {
+    if (!newPkg.label || !newPkg.tokens || !newPkg.price || !newPkg.waLink) return;
+    setPkgLoading(true);
+    try {
+      await addDoc(collection(db, 'topup_packages'), {
+        label: newPkg.label,
+        tokens: parseInt(newPkg.tokens),
+        price: newPkg.price,
+        waLink: newPkg.waLink,
+        bestValue: newPkg.bestValue,
+        createdAt: Timestamp.now(),
+      });
+      setNewPkg({ label: '', tokens: '', price: '', waLink: '', bestValue: false });
+    } catch(e) { console.error(e); }
+    setPkgLoading(false);
+  };
+
+  const deletePackage = async (id: string) => {
+    try { await deleteDoc(doc(db, 'topup_packages', id)); } catch(e) { console.error(e); }
   };
 
   const giftReferral = async (referral: any) => {
@@ -316,11 +383,24 @@ export const AdminPanel: React.FC = () => {
   };
 
 
-  const filteredUsers = users.filter(u => 
-    u.email?.toLowerCase().includes(userSearch.toLowerCase()) || 
-    u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
-    u.uid?.toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const filteredUsers = (() => {
+    let result = users.filter(u =>
+      u.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.uid?.toLowerCase().includes(userSearch.toLowerCase())
+    );
+    if (referralFilter === 'has_referrals') {
+      result = result.filter(u => (u.totalReferrals ?? 0) > 0);
+    }
+    if (referralSort !== 'none') {
+      result = [...result].sort((a, b) =>
+        referralSort === 'desc'
+          ? (b.totalReferrals ?? 0) - (a.totalReferrals ?? 0)
+          : (a.totalReferrals ?? 0) - (b.totalReferrals ?? 0)
+      );
+    }
+    return result;
+  })();
 
   if (!isAdmin) {
     return (
@@ -452,6 +532,17 @@ export const AdminPanel: React.FC = () => {
             </span>
           </button>
 
+          <button onClick={() => setActiveTab('topup_packages')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'topup_packages' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
+            <div className="flex items-center gap-4">
+              <Zap className="w-5 h-5" />
+              <span className="font-black uppercase tracking-tighter">Topup Packages</span>
+            </div>
+            <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'topup_packages' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
+              {packages.length}
+            </span>
+          </button>
+
           <button onClick={() => setActiveTab('referrals')}
             className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'referrals' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
             <div className="flex items-center gap-4">
@@ -547,8 +638,18 @@ export const AdminPanel: React.FC = () => {
                   <div>
                     <h2 className="text-4xl font-black tracking-tighter uppercase">User Management</h2>
                     <p className="text-[10px] font-mono text-neutral-500 mt-2 uppercase tracking-widest">
-                      Showing {filteredUsers.length} out of {users.length} total users
+                      Showing {filteredUsers.length} of {users.length} users
                     </p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Perm Blocked: <span className="text-red-400">{blockStats.totalBlocked}</span></span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Temp Blocked: <span className="text-amber-400">{blockStats.totalTempBlocked}</span></span>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-2xl px-4 py-2">
@@ -578,6 +679,25 @@ export const AdminPanel: React.FC = () => {
                         className="pl-12 pr-6 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition-all w-64"
                       />
                     </div>
+                    {/* Referral filter */}
+                    <select
+                      value={referralFilter}
+                      onChange={e => setReferralFilter(e.target.value as any)}
+                      className="px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm text-white outline-none focus:border-emerald-500 transition-all"
+                    >
+                      <option value="all">All Users</option>
+                      <option value="has_referrals">Has Referrals</option>
+                    </select>
+                    {/* Referral sort */}
+                    <select
+                      value={referralSort}
+                      onChange={e => setReferralSort(e.target.value as any)}
+                      className="px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm text-white outline-none focus:border-emerald-500 transition-all"
+                    >
+                      <option value="none">Default Order</option>
+                      <option value="desc">Most Referrals First</option>
+                      <option value="asc">Least Referrals First</option>
+                    </select>
                   </div>
                 </div>
 
@@ -595,13 +715,22 @@ export const AdminPanel: React.FC = () => {
                               <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${user.role === 'admin' ? 'bg-emerald-500 text-black' : 'bg-neutral-800 text-neutral-500'}`}>
                                 {user.role}
                               </span>
-                              {user.isBlocked && (
+                              {user.isBlocked && !user.tempBlockedUntil && (
                                 <span className="text-[8px] font-black px-2 py-0.5 rounded uppercase bg-red-500 text-white">
                                   Blocked
                                 </span>
                               )}
+                              {user.isBlocked && user.tempBlockedUntil && (
+                                <span className="text-[8px] font-black px-2 py-0.5 rounded uppercase bg-amber-500 text-black">
+                                  Temp {Math.max(0, Math.ceil((user.tempBlockedUntil - Date.now()) / 60000))}m left
+                                </span>
+                              )}
                             </div>
                             <p className="text-[10px] font-mono text-neutral-500 mt-1">{user.email} • {user.uid}</p>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Referrals:</span>
+                              <span className="text-[10px] font-black text-emerald-400">{user.totalReferrals ?? 0}</span>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-8">
@@ -636,16 +765,24 @@ export const AdminPanel: React.FC = () => {
                               </div>
                             </div>
                             {!user.isBlocked ? (
-                              <button onClick={() => blockUser(user.id, user.email)}
-                                className="p-4 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-2xl transition-all">
-                                <UserX className="w-5 h-5" />
-                              </button>
+                              <div className="flex flex-col gap-1.5">
+                                <button onClick={() => blockUser(user.id, user.email)}
+                                  title="Permanent block"
+                                  className="p-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+                                  <UserX className="w-4 h-4" /> Block
+                                </button>
+                                <button onClick={() => tempBlockUser(user.id, user.email)}
+                                  title="Temporary block (6 hours)"
+                                  className="p-3 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-black rounded-xl transition-all flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
+                                  <Shield className="w-4 h-4" /> 6h
+                                </button>
+                              </div>
                             ) : (
                               <button onClick={() => unblockEmail(user.email, user.id)}
                                 className="p-4 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-2xl transition-all">
                                 <Shield className="w-5 h-5" />
                               </button>
-                            ) }
+                            )}
                           </div>
                         </div>
                       </div>
@@ -844,6 +981,83 @@ export const AdminPanel: React.FC = () => {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+
+            ) : activeTab === 'topup_packages' ? (
+              <motion.div key="topup_packages" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-3xl mx-auto space-y-6">
+                <h2 className="text-4xl font-black tracking-tighter uppercase mb-8">Topup Packages</h2>
+
+                {/* Add new package form */}
+                <div className="bg-neutral-900/50 border border-neutral-800 rounded-[32px] p-8 space-y-4">
+                  <h3 className="text-lg font-black uppercase tracking-widest text-emerald-400">Add New Package</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Label (e.g. "79 Tokens for 9 Taka")</label>
+                      <input value={newPkg.label} onChange={e => setNewPkg(p => ({ ...p, label: e.target.value }))}
+                        placeholder="Buy 79 tokens for 9 taka"
+                        className="bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 transition-all" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Token Amount</label>
+                      <input value={newPkg.tokens} onChange={e => setNewPkg(p => ({ ...p, tokens: e.target.value }))}
+                        placeholder="79" type="number"
+                        className="bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 transition-all" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Price</label>
+                      <input value={newPkg.price} onChange={e => setNewPkg(p => ({ ...p, price: e.target.value }))}
+                        placeholder="9 Taka"
+                        className="bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 transition-all" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[8px] font-black uppercase tracking-widest text-neutral-600">WhatsApp Message Link</label>
+                      <input value={newPkg.waLink} onChange={e => setNewPkg(p => ({ ...p, waLink: e.target.value }))}
+                        placeholder="https://wa.me/..."
+                        className="bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 text-white text-sm outline-none focus:border-emerald-500 transition-all" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div onClick={() => setNewPkg(p => ({ ...p, bestValue: !p.bestValue }))}
+                        className="w-10 h-6 rounded-full transition-colors flex items-center px-0.5 cursor-pointer"
+                        style={{ background: newPkg.bestValue ? '#10b981' : '#374151' }}>
+                        <div className="w-5 h-5 bg-white rounded-full shadow transition-transform"
+                          style={{ transform: newPkg.bestValue ? 'translateX(16px)' : 'translateX(0)' }} />
+                      </div>
+                      <span className="text-sm font-bold text-neutral-400">Best Value ⭐</span>
+                    </label>
+                    <button onClick={addPackage} disabled={pkgLoading || !newPkg.label || !newPkg.tokens || !newPkg.waLink}
+                      className="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all">
+                      <Plus className="w-4 h-4" />
+                      {pkgLoading ? 'Adding...' : 'Add Package'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Existing packages */}
+                <div className="space-y-4">
+                  {packages.length === 0 && (
+                    <div className="py-20 text-center">
+                      <Zap className="w-16 h-16 text-neutral-900 mx-auto mb-6" />
+                      <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Packages Yet</p>
+                    </div>
+                  )}
+                  {packages.map((pkg: any) => (
+                    <div key={pkg.id} className="rounded-[28px] p-6 flex items-center justify-between transition-all"
+                      style={pkg.bestValue ? { background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.08))', border: '1px solid rgba(16,185,129,0.3)' } : { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div>
+                        {pkg.bestValue && <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400 mb-1 block">⭐ Best Value</span>}
+                        <p className="text-white font-black text-base">{pkg.label}</p>
+                        <p className="text-neutral-400 text-xs mt-1">{pkg.tokens} tokens • {pkg.price}</p>
+                        <p className="text-neutral-600 text-[10px] font-mono mt-1 truncate max-w-xs">{pkg.waLink}</p>
+                      </div>
+                      <button onClick={() => deletePackage(pkg.id)}
+                        className="p-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-2xl transition-all">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>

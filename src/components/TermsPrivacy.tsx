@@ -1,100 +1,268 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shield, Lock, Eye, FileText } from 'lucide-react';
-import { useLanguage } from '../LanguageContext';
+import { ArrowLeft, Shield, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="border border-neutral-800 rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-6 py-4 bg-neutral-900/60 hover:bg-neutral-900 transition-colors text-left"
+      >
+        <span className="text-sm font-black uppercase tracking-widest text-emerald-400">{title}</span>
+        {open ? <ChevronUp className="w-4 h-4 text-neutral-500 shrink-0" /> : <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />}
+      </button>
+      {open && (
+        <div className="px-6 py-5 bg-neutral-950/50 text-neutral-400 text-sm leading-relaxed space-y-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TermsPrivacy: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) => {
   const navigate = useNavigate();
-  const { t } = useLanguage();
-
-  const content = type === 'terms' ? {
-    title: t.termsTitle,
-    sections: [
-      {
-        title: '1. Acceptance of Terms',
-        text: 'By accessing or using Gupto, you agree to be bound by these Terms of Service. If you do not agree, you may not use the service.'
-      },
-      {
-        title: '2. Eligibility',
-        text: 'You must be at least 18 years old to use Gupto. By using the service, you represent and warrant that you are of legal age.'
-      },
-      {
-        title: '3. Prohibited Content',
-        text: 'You are strictly prohibited from sharing or broadcasting: 18+ content, nudity, violence, harassment, bullying, or any illegal material. Violation results in a permanent ban.'
-      },
-      {
-        title: '4. User Conduct',
-        text: 'You agree to treat other users with respect. Gupto is a moderated environment, and admins have the right to terminate any session.'
-      },
-      {
-        title: '5. Termination',
-        text: 'We reserve the right to terminate or suspend your access to Gupto at any time, without prior notice, for conduct that we believe violates these Terms.'
-      },
-      {
-        title: '6. Location Policy',
-        text: t.locationPolicyDesc
-      }
-    ]
-  } : {
-    title: t.privacyTitle,
-    sections: [
-      {
-        title: '1. Data Collection',
-        text: 'We do not store chat logs or video recordings. We collect minimal data required for authentication (Google account info) and moderation.'
-      },
-      {
-        title: '2. Real-time Moderation',
-        text: 'To ensure safety, we use real-time monitoring. This data is ephemeral and is not stored after the session ends unless a report is filed.'
-      },
-      {
-        title: '3. Data Security',
-        text: 'We use industry-standard encryption and security protocols to protect your data. All connections are ephemeral and designed with privacy as the top priority.'
-      },
-      {
-        title: '4. Cookies',
-        text: 'We use cookies to maintain your session and security preferences. You can manage cookie settings in your browser.'
-      },
-      {
-        title: '5. Security',
-        text: 'All video connections are end-to-end encrypted via WebRTC. We take reasonable measures to protect your information.'
-      },
-      {
-        title: '6. Location Policy',
-        text: t.locationPolicyDesc
-      }
-    ]
-  };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white p-6 sm:p-12">
-      <div className="max-w-3xl mx-auto">
-        <button 
+    <div className="min-h-screen bg-neutral-950 text-white">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-900 px-6 py-4 flex items-center gap-4">
+        <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-neutral-500 hover:text-white transition-colors mb-12 group"
+          className="flex items-center gap-2 text-neutral-500 hover:text-white transition-colors group"
         >
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="text-xs font-black uppercase tracking-widest">{t.backToHome}</span>
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          <span className="text-[10px] font-black uppercase tracking-widest">Back</span>
         </button>
+        <div className="h-4 w-px bg-neutral-800" />
+        <div className="flex items-center gap-2">
+          {type === 'terms'
+            ? <FileText className="w-4 h-4 text-emerald-500" />
+            : <Shield className="w-4 h-4 text-emerald-500" />}
+          <span className="text-sm font-black uppercase tracking-widest">
+            {type === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+          </span>
+        </div>
+        <span className="ml-auto text-[10px] text-neutral-600 font-mono">Last updated: March 2026</span>
+      </div>
 
-        <div className="flex items-center gap-4 mb-12">
-          <div className="w-16 h-16 rounded-[24px] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-            {type === 'terms' ? <FileText className="w-8 h-8 text-emerald-500" /> : <Shield className="w-8 h-8 text-emerald-500" />}
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        {/* Hero */}
+        <div className="mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-4">
+            Gupto — Secure Random Chat
           </div>
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tighter uppercase ">{content.title}</h1>
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase leading-tight mb-3">
+            {type === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+          </h1>
+          <p className="text-neutral-500 text-sm leading-relaxed">
+            {type === 'terms'
+              ? 'Please read these terms carefully before using Gupto. By using the platform you agree to everything below.'
+              : 'We believe privacy is a right. Here is exactly what we collect, what we don\'t, and how we protect you.'}
+          </p>
         </div>
 
-        <div className="space-y-12">
-          {content.sections.map((section, idx) => (
-            <div key={idx} className="space-y-4">
-              <h2 className="text-xl font-black uppercase tracking-tight  text-emerald-500">{section.title}</h2>
-              <p className="text-neutral-400 leading-relaxed font-medium">{section.text}</p>
-            </div>
-          ))}
+        {/* Content */}
+        <div className="space-y-3">
+          {type === 'terms' ? (
+            <>
+              <Section title="1. Acceptance of Terms">
+                <p>By accessing or using Gupto ("the Service", "we", "us"), you confirm that you have read, understood, and agree to be bound by these Terms of Service and all applicable laws. If you do not agree with any part of these terms, you must discontinue use of the Service immediately.</p>
+                <p>We reserve the right to update these Terms at any time. Continued use after changes constitutes acceptance of the new terms.</p>
+              </Section>
+
+              <Section title="2. Eligibility & Age Requirement">
+                <p><strong className="text-white">You must be at least 18 years old</strong> to use Gupto. By using the Service, you represent and warrant that:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>You are 18 years of age or older</li>
+                  <li>You have the legal capacity to enter into this agreement</li>
+                  <li>Your use complies with all applicable local, national, and international laws</li>
+                </ul>
+                <p>We actively enforce age restrictions and will terminate accounts of users found to be underage.</p>
+              </Section>
+
+              <Section title="3. Prohibited Content & Conduct">
+                <p>The following are <strong className="text-red-400">strictly prohibited</strong> and will result in an immediate permanent ban:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Sharing, displaying, or requesting sexually explicit or pornographic content</li>
+                  <li>Nudity, partial nudity, or suggestive behaviour directed at minors</li>
+                  <li>Violence, graphic content, threats, or incitement to harm</li>
+                  <li>Harassment, bullying, hate speech, or discriminatory language</li>
+                  <li>Solicitation, scamming, or fraudulent activity</li>
+                  <li>Sharing personal information of others without consent</li>
+                  <li>Impersonation of any person or entity</li>
+                  <li>Use of bots, scripts, or automated tools</li>
+                  <li>Any content that violates applicable law</li>
+                </ul>
+              </Section>
+
+              <Section title="4. Moderation & Enforcement">
+                <p>Gupto operates with active human and automated moderation. Our moderation team may:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Monitor live sessions for policy violations</li>
+                  <li>Immediately terminate sessions in progress</li>
+                  <li>Issue temporary bans (6 hours) or permanent bans</li>
+                  <li>Review and act upon user reports within 24 hours</li>
+                </ul>
+                <p>All enforcement decisions are at Gupto's sole discretion and are generally final.</p>
+              </Section>
+
+              <Section title="5. Token System">
+                <p>Gupto uses a token-based system to access premium features:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>New accounts receive 100 free tokens upon registration</li>
+                  <li>Video calls cost 7 tokens per call</li>
+                  <li>Custom chat rooms cost 4 tokens per session</li>
+                  <li>Tokens can be purchased via WhatsApp or earned through referrals</li>
+                  <li>Tokens have no monetary value and are non-refundable</li>
+                  <li>We reserve the right to adjust token costs at any time</li>
+                </ul>
+              </Section>
+
+              <Section title="6. Referral Programme">
+                <p>Users may share invite links to earn bonus tokens. When someone registers using your invite link:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>The referral is recorded and reviewed by our admin team</li>
+                  <li>Both the invitor and invited user may receive a token bonus at admin discretion</li>
+                  <li>Abuse of the referral system (fake accounts, self-referrals) results in disqualification and potential ban</li>
+                </ul>
+              </Section>
+
+              <Section title="7. Intellectual Property">
+                <p>All content on Gupto — including but not limited to design, code, logo, and branding — is the exclusive property of Gupto and protected by applicable intellectual property laws. You may not copy, reproduce, or distribute any part of the Service without explicit written permission.</p>
+              </Section>
+
+              <Section title="8. Disclaimers & Limitation of Liability">
+                <p>Gupto is provided "as is" without warranty of any kind. We do not guarantee uninterrupted or error-free service. To the maximum extent permitted by law, Gupto shall not be liable for any direct, indirect, incidental, or consequential damages arising from your use of the Service.</p>
+              </Section>
+
+              <Section title="9. Termination">
+                <p>We may suspend or terminate your access at any time, with or without cause, with or without notice. Upon termination, your right to use the Service ceases immediately. Provisions that by their nature should survive termination shall survive, including ownership, warranty disclaimers, and limitation of liability.</p>
+              </Section>
+
+              <Section title="10. Governing Law">
+                <p>These Terms are governed by and construed in accordance with applicable laws. Any disputes arising in connection with these Terms shall be subject to the exclusive jurisdiction of the relevant courts.</p>
+              </Section>
+
+              <Section title="11. Contact">
+                <p>For any questions regarding these Terms, please reach out to us via:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Facebook: <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">facebook.com/guptochat</a></li>
+                </ul>
+              </Section>
+            </>
+          ) : (
+            <>
+              <Section title="1. Our Privacy Commitment">
+                <p>At Gupto, privacy is a core design principle — not an afterthought. We have built the platform to minimise data collection and maximise user anonymity. This policy explains exactly what we do and do not collect.</p>
+              </Section>
+
+              <Section title="2. What We Collect">
+                <p><strong className="text-white">Account Information (via Google Sign-In):</strong></p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Your Google account email address</li>
+                  <li>Your Google display name and profile photo</li>
+                  <li>A unique user ID generated by Firebase Authentication</li>
+                </ul>
+                <p className="mt-2"><strong className="text-white">Usage Data:</strong></p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Token balance and transaction history (purchases, usage)</li>
+                  <li>Number of referrals made</li>
+                  <li>Announcements you have viewed (stored as a list of IDs)</li>
+                  <li>Your chosen display name (if saved)</li>
+                </ul>
+                <p className="mt-2"><strong className="text-white">Moderation Data:</strong></p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Reports filed against you or by you, including stated reason and timestamp</li>
+                  <li>Block status and, if temporarily blocked, the expiry timestamp</li>
+                </ul>
+              </Section>
+
+              <Section title="3. What We Do NOT Collect">
+                <p>We want to be explicit about what Gupto <strong className="text-red-400">never</strong> stores:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Video or audio recordings of any session</li>
+                  <li>Chat message content (messages are relayed peer-to-peer and not persisted)</li>
+                  <li>IP addresses for tracking purposes</li>
+                  <li>Device fingerprints or advertising identifiers</li>
+                  <li>Browsing history or behaviour outside of Gupto</li>
+                </ul>
+              </Section>
+
+              <Section title="4. Video & Audio (WebRTC)">
+                <p>All video and audio connections use <strong className="text-white">WebRTC peer-to-peer technology</strong>. Your video and audio stream goes directly to your chat partner's device — it does not pass through or get stored on our servers. STUN/TURN relay servers are used only to establish the connection and do not record content.</p>
+              </Section>
+
+              <Section title="5. Text Chat">
+                <p>Text messages are relayed in real-time via our server using Socket.IO. Messages are <strong className="text-white">not stored in any database</strong>. Once a chat session ends, all messages are permanently lost. We do not have access to your conversation history.</p>
+              </Section>
+
+              <Section title="6. How We Use Your Data">
+                <p>The data we collect is used solely for:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Authenticating your identity and maintaining your session</li>
+                  <li>Enforcing community guidelines and processing reports</li>
+                  <li>Operating the token system (balance, purchases, usage)</li>
+                  <li>Delivering platform announcements</li>
+                  <li>Preventing abuse, fraud, and policy violations</li>
+                </ul>
+                <p>We do not sell, rent, or share your personal data with third parties for marketing or commercial purposes.</p>
+              </Section>
+
+              <Section title="7. Data Storage & Security">
+                <p>Your account data is stored in <strong className="text-white">Google Firebase Firestore</strong>, a cloud database with industry-standard security. Firebase is governed by Google's infrastructure security policies. Data is encrypted at rest and in transit.</p>
+                <p>Access to Firestore is governed by strict security rules — users can only read and write their own data. Admin access is limited to a single verified admin account.</p>
+              </Section>
+
+              <Section title="8. Authentication (Google Sign-In)">
+                <p>We use Google OAuth 2.0 for authentication. We receive only the basic profile information you grant (email, name, photo). We do not receive your Google password or access to your Gmail, Drive, or other Google services. You can revoke access at any time from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Google Account settings</a>.</p>
+              </Section>
+
+              <Section title="9. Cookies & Local Storage">
+                <p>Gupto uses browser local storage and session storage minimally — only to preserve your preferences (such as display name and language) and to facilitate the authentication session. We do not use tracking cookies or third-party advertising cookies.</p>
+              </Section>
+
+              <Section title="10. Children's Privacy">
+                <p>Gupto is strictly for users aged 18 and over. We do not knowingly collect personal information from anyone under 18. If we become aware that a user is under 18, we will immediately delete their account and associated data. If you believe a minor is using the platform, please report it through our Facebook page.</p>
+              </Section>
+
+              <Section title="11. Your Rights">
+                <p>You have the right to:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li><strong className="text-white">Access:</strong> Request a copy of the data we hold about you</li>
+                  <li><strong className="text-white">Deletion:</strong> Request deletion of your account and all associated data</li>
+                  <li><strong className="text-white">Correction:</strong> Update inaccurate information in your profile</li>
+                  <li><strong className="text-white">Portability:</strong> Receive your data in a machine-readable format</li>
+                </ul>
+                <p>To exercise these rights, contact us via Facebook.</p>
+              </Section>
+
+              <Section title="12. Changes to This Policy">
+                <p>We may update this Privacy Policy periodically. We will notify users of significant changes via an in-app announcement. The "Last updated" date at the top of this page reflects the most recent revision. Continued use of Gupto after changes constitutes acceptance of the updated policy.</p>
+              </Section>
+
+              <Section title="13. Contact">
+                <p>For privacy concerns, data requests, or questions about this policy:</p>
+                <ul className="list-disc list-inside space-y-1 text-neutral-500">
+                  <li>Facebook: <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">facebook.com/guptochat</a></li>
+                </ul>
+              </Section>
+            </>
+          )}
         </div>
 
-        <footer className="mt-20 pt-12 border-t border-neutral-900 text-center">
-          <p className="text-neutral-600 text-[10px] font-bold uppercase tracking-widest">{t.copyright}</p>
-        </footer>
+        {/* Footer */}
+        <div className="mt-16 pt-8 border-t border-neutral-900 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-neutral-600 text-[10px] font-bold uppercase tracking-widest">© 2026 Gupto Protocol. All rights reserved.</p>
+          <div className="flex gap-6">
+            {type === 'terms'
+              ? <a href="/privacy" className="text-neutral-600 hover:text-emerald-400 transition-colors text-[10px] font-bold uppercase tracking-widest">Privacy Policy</a>
+              : <a href="/terms" className="text-neutral-600 hover:text-emerald-400 transition-colors text-[10px] font-bold uppercase tracking-widest">Terms of Service</a>}
+            <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-neutral-600 hover:text-blue-400 transition-colors text-[10px] font-bold uppercase tracking-widest">Facebook</a>
+          </div>
+        </div>
       </div>
     </div>
   );

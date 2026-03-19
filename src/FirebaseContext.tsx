@@ -19,6 +19,8 @@ interface UserData {
   lastCallDate?: string;
   inviteCode?: string;
   seenAnnouncements?: string[];
+  totalReferrals?: number;
+  tempBlockedUntil?: number | null; // epoch ms, null = not temp blocked
 }
 
 interface FirebaseContextType {
@@ -113,6 +115,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                       status:       'pending',
                     });
                     console.log('Referral record saved for admin review');
+                    // Increment invitor's total referral count
+                    updateDoc(doc(db, 'users', refCode), {
+                      totalReferrals: increment(1)
+                    }).catch(() => {});
                   }
                 }
               } catch(e) { console.error('Failed to save referral record:', e); }
@@ -149,6 +155,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (currentData.tokens === undefined) {
             updateDoc(userDocRef, { tokens: 100 }).catch(() => {});
             currentData = { ...currentData, tokens: 100 };
+          }
+
+          // Auto-unblock temp-blocked users whose 6-hour window has passed
+          if (currentData.tempBlockedUntil && Date.now() > currentData.tempBlockedUntil) {
+            updateDoc(userDocRef, {
+              isBlocked: false,
+              tempBlockedUntil: null,
+            }).catch(() => {});
+            currentData = { ...currentData, isBlocked: false, tempBlockedUntil: null };
+          }
+
+          // Schedule a check for when the temp block expires (for active sessions)
+          if (currentData.tempBlockedUntil && currentData.tempBlockedUntil > Date.now()) {
+            const msUntilUnblock = currentData.tempBlockedUntil - Date.now();
+            setTimeout(() => {
+              updateDoc(userDocRef, { isBlocked: false, tempBlockedUntil: null }).catch(() => {});
+            }, msUntilUnblock + 1000); // +1s buffer
           }
 
           // Check if email is blocked

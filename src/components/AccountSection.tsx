@@ -173,6 +173,18 @@ export const AccountSection: React.FC<AccountSectionProps> = ({ onClose }) => {
             <p className="text-white text-sm mt-1 font-medium">{user?.email}</p>
           </div>
 
+          {/* Referrals */}
+          <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User size={15} className="text-emerald-400" />
+                <span className="text-neutral-400 text-sm">Total Referrals</span>
+              </div>
+              <span className="text-emerald-400 font-black text-lg">{userData?.totalReferrals ?? 0}</span>
+            </div>
+            <p className="text-neutral-600 text-xs mt-1">People who joined using your invite link</p>
+          </div>
+
         </div>
       </div>
     </div>
