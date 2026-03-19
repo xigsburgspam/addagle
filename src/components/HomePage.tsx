@@ -128,13 +128,6 @@ export const HomePage: React.FC<{
     districtUsers: {} as Record<string, number>,
   });
 
-  // Save ?ref= to localStorage immediately on page load
-  // This runs before any auth state, so it's always captured
-  useEffect(() => {
-    const ref = new URLSearchParams(window.location.search).get('ref');
-    if (ref) localStorage.setItem('pendingRef', ref);
-  }, []);
-
   // Load announcements and compute unread count
   useEffect(() => {
     const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));

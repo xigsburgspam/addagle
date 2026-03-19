@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc, getDocs, arrayRemove } from '../firebase';
+import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc, getDocs, arrayRemove, getDoc } from '../firebase';
 import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff, Users, Search, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -60,7 +60,10 @@ export const AdminPanel: React.FC = () => {
   const [activeRooms,  setActiveRooms]  = useState<ActiveRoom[]>([]);
   const [users,        setUsers]        = useState<User[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users' | 'announcements'>('reports');
+  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users' | 'announcements' | 'referrals'>('reports');
+  const [referrals,     setReferrals]     = useState<any[]>([]);
+  const [giftAmounts,   setGiftAmounts]   = useState<Record<string, number>>({});
+  const [giftingId,     setGiftingId]     = useState<string | null>(null);
   const [giveAllAmount, setGiveAllAmount] = useState<number>(100);
   const [givingAll,     setGivingAll]     = useState(false);
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -116,8 +119,23 @@ export const AdminPanel: React.FC = () => {
     const qAnn = query(collection(db, 'announcements'));
     const unsubAnn = onSnapshot(qAnn, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      data.sort((a: any, b: any) => (b.createdAt?.localeCompare?.(a.createdAt) || 0));
       setAnnouncements(data);
+    });
+
+    const qRef = query(collection(db, 'referrals'));
+    const unsubReferrals = onSnapshot(qRef, (snapshot) => {
+      const data = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter((r: any) => r.status === 'pending')
+        .sort((a: any, b: any) => b.createdAt?.localeCompare?.(a.createdAt) || 0);
+      setReferrals(data);
+      // Init gift amounts for new referrals
+      setGiftAmounts(prev => {
+        const next = { ...prev };
+        data.forEach((r: any) => { if (!(r.id in next)) next[r.id] = 25; });
+        return next;
+      });
     });
 
     return () => {
@@ -126,6 +144,7 @@ export const AdminPanel: React.FC = () => {
       unsubscribeMatches();
       unsubscribeUsers();
       unsubAnn();
+      unsubReferrals();
       clearInterval(roomInterval);
     };
   }, [isAdmin]);
@@ -209,6 +228,31 @@ export const AdminPanel: React.FC = () => {
       setNewAnnBody('');
     } catch (e) { console.error('Post announcement failed', e); }
     setAnnLoading(false);
+  };
+
+  const giftReferral = async (referral: any) => {
+    const amount = giftAmounts[referral.id] ?? 25;
+    if (!amount || amount <= 0) return;
+    setGiftingId(referral.id);
+    try {
+      // Gift invitor
+      const invitorSnap = await getDoc(doc(db, 'users', referral.invitorUid));
+      if (invitorSnap.exists()) {
+        await updateDoc(doc(db, 'users', referral.invitorUid), {
+          tokens: (invitorSnap.data().tokens ?? 100) + amount
+        });
+      }
+      // Gift invited
+      const invitedSnap = await getDoc(doc(db, 'users', referral.invitedUid));
+      if (invitedSnap.exists()) {
+        await updateDoc(doc(db, 'users', referral.invitedUid), {
+          tokens: (invitedSnap.data().tokens ?? 100) + amount
+        });
+      }
+      // Delete the referral record from database
+      await deleteDoc(doc(db, 'referrals', referral.id));
+    } catch (e) { console.error('Gift referral failed', e); }
+    setGiftingId(null);
   };
 
   const deleteAnnouncement = async (id: string) => {
@@ -406,6 +450,19 @@ export const AdminPanel: React.FC = () => {
             <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'announcements' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
               {announcements.length}
             </span>
+          </button>
+
+          <button onClick={() => setActiveTab('referrals')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'referrals' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
+            <div className="flex items-center gap-4">
+              <Users className="w-5 h-5" />
+              <span className="font-black uppercase tracking-tighter">Referrals</span>
+            </div>
+            {referrals.length > 0 && (
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'referrals' ? 'bg-black text-emerald-500' : 'bg-red-500 text-white'}`}>
+                {referrals.length}
+              </span>
+            )}
           </button>
 
           <button onClick={() => { window.location.href = '/'; }}
@@ -790,6 +847,71 @@ export const AdminPanel: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </motion.div>
+
+            ) : activeTab === 'referrals' ? (
+              <motion.div key="referrals" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-4xl mx-auto space-y-6">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-4xl font-black tracking-tighter uppercase">Referrals</h2>
+                    <p className="text-[10px] font-mono text-neutral-500 mt-2 uppercase tracking-widest">
+                      {referrals.length} pending — gift tokens to both users
+                    </p>
+                  </div>
+                </div>
+
+                {referrals.length === 0 ? (
+                  <div className="py-40 text-center">
+                    <Users className="w-20 h-20 text-neutral-900 mx-auto mb-8" />
+                    <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Pending Referrals</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {referrals.map((ref: any) => (
+                      <div key={ref.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] p-8 hover:border-emerald-500/20 transition-all">
+                        <div className="flex items-center justify-between gap-6 flex-wrap">
+                          <div className="flex items-center gap-8 flex-wrap">
+                            {/* Invitor */}
+                            <div>
+                              <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Invitor</p>
+                              <p className="text-sm font-bold text-white">{ref.invitorEmail || ref.invitorUid}</p>
+                            </div>
+                            <div className="text-neutral-700 font-black text-xl">→</div>
+                            {/* Invited */}
+                            <div>
+                              <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Invited</p>
+                              <p className="text-sm font-bold text-emerald-400">{ref.invitedEmail || ref.invitedUid}</p>
+                            </div>
+                            <div>
+                              <p className="text-[8px] font-black uppercase tracking-widest text-neutral-600 mb-1">Date</p>
+                              <p className="text-[10px] font-mono text-neutral-500">{ref.createdAt?.split('T')[0] || ''}</p>
+                            </div>
+                          </div>
+                          {/* Gift controls */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Tokens each</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={giftAmounts[ref.id] ?? 25}
+                                onChange={e => setGiftAmounts(prev => ({ ...prev, [ref.id]: parseInt(e.target.value) || 0 }))}
+                                className="w-20 bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-center text-sm text-white font-black outline-none focus:border-emerald-500 transition-all"
+                              />
+                            </div>
+                            <button
+                              onClick={() => giftReferral(ref)}
+                              disabled={giftingId === ref.id || !giftAmounts[ref.id]}
+                              className="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 mt-4"
+                            >
+                              {giftingId === ref.id ? 'Gifting...' : `🎁 Gift ${giftAmounts[ref.id] ?? 25} Tokens Each`}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </motion.div>
             ) : null}
           </AnimatePresence>

@@ -97,28 +97,25 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
                 .catch(() => {});
 
-              // ── Referral bonus ──
-              // ?ref= param stays in URL with signInWithPopup — read it directly
-              // Also check localStorage as fallback (written on page load below)
+              // ── Referral: save pending record for admin to review & gift ──
               try {
-                const urlRef = new URLSearchParams(window.location.search).get('ref');
-                const lsRef = localStorage.getItem('pendingRef');
-                const refCode = urlRef || lsRef;
-                if (lsRef) localStorage.removeItem('pendingRef');
-                // refCode is the referrer's UID — look them up directly
+                const refCode = new URLSearchParams(window.location.search).get('ref');
                 if (refCode && refCode !== firebaseUser.uid) {
                   const referrerSnap = await getDoc(doc(db, 'users', refCode));
-                  if (referrerSnap.exists() && referrerSnap.data().uid !== firebaseUser.uid) {
-                    // Give referrer +25 tokens
-                    await updateDoc(doc(db, 'users', refCode), {
-                      tokens: (referrerSnap.data().tokens ?? 100) + 25
+                  if (referrerSnap.exists()) {
+                    const rData = referrerSnap.data();
+                    await setDoc(doc(db, 'referrals', `${refCode}_${firebaseUser.uid}`), {
+                      invitorUid:   refCode,
+                      invitorEmail: rData.email || '',
+                      invitedUid:   firebaseUser.uid,
+                      invitedEmail: firebaseUser.email || '',
+                      createdAt:    new Date().toISOString(),
+                      status:       'pending',
                     });
-                    // Give new user +25 tokens (total 125)
-                    await updateDoc(userDocRef, { tokens: 125 });
-                    console.log('Referral bonus applied! Referrer UID:', refCode);
+                    console.log('Referral record saved for admin review');
                   }
                 }
-              } catch(e) { console.error('Referral bonus failed:', e); }
+              } catch(e) { console.error('Failed to save referral record:', e); }
 
               return true;
             } catch (e: any) {
