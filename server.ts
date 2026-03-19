@@ -20,12 +20,21 @@ const db = getClientFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Firebase Admin SDK for server-side operations (bypasses rules)
 let adminApp;
+console.log('Initializing Firebase Admin with Project ID:', firebaseConfig.projectId);
+console.log('Using Firestore Database ID:', firebaseConfig.firestoreDatabaseId || '(default)');
+
 if (!getAdminApps().length) {
-  adminApp = initializeAdminApp({
-    projectId: firebaseConfig.projectId,
-  });
+  try {
+    adminApp = initializeAdminApp({
+      projectId: firebaseConfig.projectId,
+    });
+    console.log('Firebase Admin App initialized successfully');
+  } catch (e) {
+    console.error('Failed to initialize Firebase Admin App:', e);
+  }
 } else {
   adminApp = getAdminApps()[0];
+  console.log('Using existing Firebase Admin App');
 }
 // Use the named database if provided, otherwise default
 const adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId || '(default)');
