@@ -69,9 +69,11 @@ service cloud.firestore {
              data.email is string &&
              data.role in ['admin', 'user'] &&
              (!('isBlocked' in data) || data.isBlocked is bool) &&
-             (!('tokens' in data) || data.tokens is int) &&
+             (!('tokens' in data) || data.tokens is number) &&
              (!('savedDisplayName' in data) || data.savedDisplayName is string || data.savedDisplayName == null) &&
-             (!('hasSavedName' in data) || data.hasSavedName is bool);
+             (!('hasSavedName' in data) || data.hasSavedName is bool) &&
+             (!('videoCallsToday' in data) || data.videoCallsToday is number) &&
+             (!('lastCallDate' in data) || data.lastCallDate is string);
     }
 
     function isValidReport(data) {

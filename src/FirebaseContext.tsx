@@ -63,6 +63,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (docSnap.exists()) {
             currentData = docSnap.data() as UserData;
           } else {
+            // New user — build their document
             currentData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
@@ -71,29 +72,42 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               role: firebaseUser.email === 'edublitz71@gmail.com' ? 'admin' : 'user',
               isBlocked: false,
               tokens: 100,
-              videoCallsToday: 0,
-              lastCallDate: '',
             };
-            await setDoc(userDocRef, currentData).catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${firebaseUser.uid}`));
-            await updateDoc(doc(db, 'stats', 'global'), {
-              totalAccounts: increment(1)
-            }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'stats/global'));
+            try {
+              await setDoc(userDocRef, currentData);
+            } catch (e) {
+              console.error('Failed to create user doc:', e);
+              // Still set userData so the app doesn't hang on loading
+            }
+            try {
+              await updateDoc(doc(db, 'stats', 'global'), {
+                totalAccounts: increment(1)
+              });
+            } catch (e) {
+              console.error('Failed to update stats:', e);
+            }
           }
 
           // Check if email is blocked
           if (firebaseUser.email) {
-            const emailBlockRef = doc(db, 'blocked_emails', firebaseUser.email);
-            const emailBlockSnap = await getDoc(emailBlockRef);
-            if (emailBlockSnap.exists()) {
-              currentData.isEmailBlocked = true;
-              currentData.isBlocked = true; // Force block if email is blocked
+            try {
+              const emailBlockRef = doc(db, 'blocked_emails', firebaseUser.email);
+              const emailBlockSnap = await getDoc(emailBlockRef);
+              if (emailBlockSnap.exists()) {
+                currentData.isEmailBlocked = true;
+                currentData.isBlocked = true;
+              }
+            } catch (e) {
+              console.error('Failed to check blocked email:', e);
             }
           }
 
           setUserData(currentData);
           setLoading(false);
         }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+          // Log but never throw — throwing here crashes the ErrorBoundary
+          console.error('Firestore snapshot error:', error);
+          setLoading(false);
         });
       } else {
         setUserData(null);

@@ -28,7 +28,7 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -49,11 +49,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  
-  // If it's a permission error, we might want to show a specific message
-  if (errInfo.error.includes('insufficient permissions')) {
-    throw new Error(JSON.stringify(errInfo));
-  }
-  
-  throw error;
+  // Do NOT throw — throwing inside onSnapshot callbacks or .catch() handlers
+  // propagates to the React ErrorBoundary and crashes the whole app.
+  // Callers that truly need to rethrow must do so explicitly.
 }
