@@ -97,7 +97,11 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
       allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
                     (request.resource.data.role == 'user' || (request.resource.data.role == 'admin' && request.auth.token.email == "edublitz71@gmail.com"));
-      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.isBlocked == resource.data.isBlocked));
+      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && 
+                    request.resource.data.role == resource.data.role && 
+                    request.resource.data.isBlocked == resource.data.isBlocked &&
+                    (!('videoCount' in request.resource.data) || request.resource.data.videoCount == resource.data.videoCount) &&
+                    (!('lastVideoDate' in request.resource.data) || request.resource.data.lastVideoDate == resource.data.lastVideoDate)));
     }
 
     match /reports/{reportId} {
@@ -126,11 +130,6 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidFootballMatch(request.resource.data);
       allow update: if isAdmin() && isValidFootballMatch(request.resource.data);
       allow delete: if isAdmin();
-    }
-
-    match /videoStats/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow write: if false; // Only server (Admin SDK) should write
     }
 
     match /blocks/{blockId} {

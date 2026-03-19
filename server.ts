@@ -21,12 +21,10 @@ const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 if (!admin.apps.length) {
   admin.initializeApp({
     projectId: firebaseConfig.projectId,
-    // databaseId is used for named databases in admin SDK
-    // @ts-ignore
-    databaseId: firebaseConfig.firestoreDatabaseId
   });
 }
-const adminDb = admin.firestore();
+// Use the named database if provided, otherwise default
+const adminDb = admin.firestore(firebaseConfig.firestoreDatabaseId || '(default)');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -231,11 +229,11 @@ async function startServer() {
     if (!stats || stats.lastDate !== today) {
       // Fetch from Firestore using Admin SDK
       try {
-        const docSnap = await adminDb.collection('videoStats').doc(uid).get();
+        const docSnap = await adminDb.collection('users').doc(uid).get();
         if (docSnap.exists) {
           const data = docSnap.data() as any;
-          if (data.lastDate === today) {
-            stats = { count: data.count, lastDate: data.lastDate };
+          if (data.lastVideoDate === today) {
+            stats = { count: data.videoCount || 0, lastDate: data.lastVideoDate };
           } else {
             stats = { count: 0, lastDate: today };
           }
@@ -299,13 +297,13 @@ async function startServer() {
                   const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
                   stats.count++;
                   userVideoChatStats.set(myUid, stats);
-                  adminDb.collection('videoStats').doc(myUid).set(stats, { merge: true }).catch(() => {});
+                  adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
                 }
                 if (!partnerIsAdmin && partnerUid) {
                   const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
                   stats.count++;
                   userVideoChatStats.set(partnerUid, stats);
-                  adminDb.collection('videoStats').doc(partnerUid).set(stats, { merge: true }).catch(() => {});
+                  adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
                 }
               }
               activeMatchStartTimes.delete(roomId);
@@ -388,23 +386,23 @@ async function startServer() {
             activeMatches.delete(socket.id);
             activeMatches.delete(partner.socketId);
             // Handle count if >= 40s (which it is)
-            if (isVideo) {
-              if (!isAdmin) {
-                const stats = userVideoChatStats.get(uid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
-                stats.count++;
-                userVideoChatStats.set(uid, stats);
-                adminDb.collection('videoStats').doc(uid).set(stats, { merge: true }).catch(() => {});
-              }
-              if (partnerSocket && !(partnerSocket as any)._isAdmin) {
-                const partnerUid = (partnerSocket as any)._uid;
-                if (partnerUid) {
-                  const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
-                  stats.count++;
-                  userVideoChatStats.set(partnerUid, stats);
-                  adminDb.collection('videoStats').doc(partnerUid).set(stats, { merge: true }).catch(() => {});
+                if (isVideo) {
+                  if (!isAdmin) {
+                    const stats = userVideoChatStats.get(uid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                    stats.count++;
+                    userVideoChatStats.set(uid, stats);
+                    adminDb.collection('users').doc(uid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                  }
+                  if (partnerSocket && !(partnerSocket as any)._isAdmin) {
+                    const partnerUid = (partnerSocket as any)._uid;
+                    if (partnerUid) {
+                      const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                      stats.count++;
+                      userVideoChatStats.set(partnerUid, stats);
+                      adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+                    }
+                  }
                 }
-              }
-            }
             activeMatchStartTimes.delete(roomId);
             sessionTimeouts.delete(roomId);
           }
@@ -518,6 +516,40 @@ async function startServer() {
     socket.on('next', () => {
       const partnerId = activeMatches.get(socket.id);
       if (partnerId) {
+        const roomId = (socket as any)._roomId;
+        if (roomId) {
+          const startTime = activeMatchStartTimes.get(roomId);
+          if (startTime) {
+            const duration = (Date.now() - startTime) / 1000;
+            if (duration >= 40) {
+              const myUid = (socket as any)._uid;
+              const myIsAdmin = (socket as any)._isAdmin;
+              const partnerSocket = io.sockets.sockets.get(partnerId);
+              const partnerUid = partnerSocket ? (partnerSocket as any)._uid : null;
+              const partnerIsAdmin = partnerSocket ? (partnerSocket as any)._isAdmin : false;
+
+              if (myUid && !myIsAdmin) {
+                const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                stats.count++;
+                userVideoChatStats.set(myUid, stats);
+                adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+              }
+              if (partnerUid && !partnerIsAdmin) {
+                const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                stats.count++;
+                userVideoChatStats.set(partnerUid, stats);
+                adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
+              }
+            }
+            activeMatchStartTimes.delete(roomId);
+            const timeout = sessionTimeouts.get(roomId);
+            if (timeout) {
+              clearTimeout(timeout);
+              sessionTimeouts.delete(roomId);
+            }
+          }
+        }
+
         io.to(partnerId).emit('partner-skipped');
         activeMatches.delete(partnerId);
         activeMatches.delete(socket.id);
@@ -819,13 +851,13 @@ async function startServer() {
                 const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
                 stats.count++;
                 userVideoChatStats.set(myUid, stats);
-                setDoc(doc(db, 'videoStats', myUid), stats, { merge: true }).catch(() => {});
+                adminDb.collection('users').doc(myUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
               }
               if (partnerUid && !partnerIsAdmin) {
                 const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
                 stats.count++;
                 userVideoChatStats.set(partnerUid, stats);
-                setDoc(doc(db, 'videoStats', partnerUid), stats, { merge: true }).catch(() => {});
+                adminDb.collection('users').doc(partnerUid).set({ videoCount: stats.count, lastVideoDate: stats.lastDate }, { merge: true }).catch(() => {});
               }
             }
             activeMatchStartTimes.delete(roomId);
