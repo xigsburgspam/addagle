@@ -87,7 +87,6 @@ export const AccountSection: React.FC<AccountSectionProps> = ({ onClose }) => {
   };
 
   const displayedName = userData?.savedDisplayName || userData?.displayName || user?.displayName || 'Anonymous';
-  const videoPercent = Math.min(100, Math.round((videoUsage / videoLimit) * 100));
 
   return (
     <div
