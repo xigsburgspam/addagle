@@ -61,12 +61,32 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
     const sock = io({ forceNew: true });
     setSocket(sock);
 
-    const onConnect = () => {
+    const onConnect = async () => {
+      // Resolve district once, reusing it for both join and set-district events.
+      // getDistrict() now has an IP-based fallback so it works on PC/laptop/desktop
+      // even when the browser Geolocation API is denied or unavailable.
+      let resolvedDistrict: string | undefined = roomData.districtName;
+
+      const needsDistrict =
+        roomData.mode === 'district' ||
+        roomData.action === 'global' ||
+        !resolvedDistrict;
+
+      if (needsDistrict) {
+        try {
+          resolvedDistrict = await getDistrict();
+        } catch {
+          // If all detection methods fail, keep whatever was passed in roomData
+        }
+      }
+
       if (roomData.action === 'global') {
         sock.emit('custom-join-global', { name: roomData.userName, uid: user?.uid, email: user?.email });
       } else if (roomData.mode === 'district') {
+        // FIX: use the freshly resolved district (not stale roomData.districtName)
+        // so joining works on PC where geolocation was previously unresolved.
         sock.emit('custom-join-district', {
-          district: roomData.districtName,
+          district: resolvedDistrict,
           name: roomData.userName,
           uid: user?.uid,
           email: user?.email
@@ -76,7 +96,7 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
           roomName: roomData.roomName,
           maxMembers: roomData.maxMembers,
           mode: roomData.mode,
-          district: roomData.districtName,
+          district: resolvedDistrict,
           name: roomData.userName,
           uid: user?.uid,
           email: user?.email
@@ -89,9 +109,11 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
           email: user?.email
         });
       }
-      getDistrict().then(district => {
-        sock.emit('set-district', { district });
-      }).catch(() => {});
+
+      // Inform server of this user's district (used for live-map tracking).
+      if (resolvedDistrict) {
+        sock.emit('set-district', { district: resolvedDistrict });
+      }
     };
 
     if (sock.connected) onConnect();
