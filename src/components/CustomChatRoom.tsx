@@ -218,16 +218,16 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
   const isWaiting = roomState && !roomState.isGlobal && roomState.users.length < 2;
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full bg-[#0d0e11] text-white overflow-hidden relative">
+    <div className="flex flex-col h-[100dvh] w-full bg-[#111214] text-white overflow-hidden relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] shrink-0 bg-[#13151a]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0 bg-[#161719]">
         <div className="flex items-center gap-3">
-          <button onClick={onLeave} className="w-8 h-8 rounded-full bg-white/6 hover:bg-white/12 flex items-center justify-center transition-colors cursor-pointer">
+          <button onClick={onLeave} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer">
             <ArrowLeft className="w-4 h-4 text-neutral-400" />
           </button>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">
+              <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">
                 {roomState?.isGlobal ? 'GLOBAL CHAT' : roomState?.mode === 'district' ? 'DISTRICT CHAT' : 'CUSTOM ROOM'}
               </span>
             </div>
@@ -272,8 +272,8 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                   )}
                   
                   {entry.replyTo && (
-                    <div className="mb-1 px-3 py-1.5 bg-white/5 border-l-2 border-indigo-500 rounded-r-lg text-[11px] text-neutral-400 italic max-w-full truncate">
-                      <span className="font-bold text-indigo-400 not-italic mr-1">{entry.replyTo.name}:</span>
+                    <div className={`mb-1 px-3 py-1.5 rounded-xl text-[11px] text-neutral-400 italic max-w-full truncate border-l-[3px] border-emerald-500 ${entry.name === roomData.userName ? 'bg-black/20' : 'bg-black/25'}`}>
+                      <span className="font-bold text-emerald-500 not-italic mr-1">{entry.replyTo.name}:</span>
                       {entry.replyTo.text}
                     </div>
                   )}
@@ -289,12 +289,12 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                             <Smile className="w-3 h-3 text-neutral-400" />
                           </button>
                           {activeEmojiMenu === entry.id && (
-                            <div className="absolute bottom-full right-0 mb-2 p-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
+                            <div className="absolute bottom-full right-0 mb-2 p-1 bg-[#1e2128] border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
                               {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
                                 <button
                                   key={emoji}
                                   onClick={() => { react(entry.id, emoji); setActiveEmojiMenu(null); }}
-                                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-sm"
+                                  className="w-9 h-9 flex items-center justify-center rounded-xl text-[1.25rem] hover:bg-white/10 active:scale-90 transition-all duration-100 cursor-pointer"
                                 >
                                   {emoji}
                                 </button>
@@ -305,10 +305,10 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                       </div>
                     )}
 
-                    <div className={`px-3.5 py-2 rounded-2xl text-[13px] leading-relaxed relative ${
+                    <div className={`px-3.5 py-2 rounded-2xl text-[13.5px] leading-relaxed relative shadow-md ${
                       entry.name === roomData.userName
-                        ? 'bg-indigo-600 text-white rounded-br-sm'
-                        : 'bg-neutral-800 text-neutral-200 rounded-bl-sm border border-white/[0.05]'
+                        ? 'bg-[#2b5c3f] text-white rounded-tr-sm shadow-emerald-950/50'
+                        : 'bg-[#1e2026] text-[#e8eaf0] rounded-tl-sm border border-white/[0.06] shadow-black/40'
                     }`}>
                       {entry.text}
                       
@@ -319,7 +319,7 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                             <button
                               key={emoji}
                               onClick={() => react(entry.id, emoji)}
-                              className="px-1.5 py-0.5 bg-neutral-900 border border-white/10 rounded-full text-[10px] flex items-center gap-1 hover:bg-neutral-800 transition-colors"
+                              className="px-1.5 py-0.5 bg-[#1a1c22] border border-white/10 rounded-full text-[10px] flex items-center gap-1 hover:bg-neutral-800 transition-colors shadow-lg"
                             >
                               <span>{emoji}</span>
                               <span className="text-neutral-500">{(users as string[]).length}</span>
@@ -339,12 +339,12 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                             <Smile className="w-3 h-3 text-neutral-400" />
                           </button>
                           {activeEmojiMenu === entry.id && (
-                            <div className="absolute bottom-full left-0 mb-2 p-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
+                            <div className="absolute bottom-full left-0 mb-2 p-1 bg-[#1e2128] border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
                               {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
                                 <button
                                   key={emoji}
                                   onClick={() => { react(entry.id, emoji); setActiveEmojiMenu(null); }}
-                                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-sm"
+                                  className="w-9 h-9 flex items-center justify-center rounded-xl text-[1.25rem] hover:bg-white/10 active:scale-90 transition-all duration-100 cursor-pointer"
                                 >
                                   {emoji}
                                 </button>
@@ -363,11 +363,11 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
         </div>
 
         {/* Input */}
-        <div className="p-3 bg-[#13151a] border-t border-white/[0.07] shrink-0">
+        <div className="p-3 bg-[#161719] border-t border-white/[0.06] shrink-0">
           {replyTo && (
-            <div className="mb-2 px-3 py-2 bg-white/5 border-l-2 border-indigo-500 rounded-r-lg flex items-center justify-between group">
+            <div className="mb-2 px-3 py-2 bg-white/5 border-l-[3px] border-emerald-500 rounded-r-lg flex items-center justify-between group">
               <div className="text-[11px] text-neutral-400 italic truncate">
-                <span className="font-bold text-indigo-400 not-italic mr-1">Replying to {replyTo.name}:</span>
+                <span className="font-bold text-emerald-500 not-italic mr-1">Replying to {replyTo.name}:</span>
                 {replyTo.text}
               </div>
               <button onClick={() => setReplyTo(null)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
@@ -376,22 +376,28 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
             </div>
           )}
           {inputError && <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-2 ml-1">{inputError}</p>}
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={inputText}
-              onChange={e => { setInputText(e.target.value); setInputError(''); }}
-              onKeyDown={e => e.key === 'Enter' && send()}
-              placeholder={isWaiting ? "Waiting for members..." : "Type a message..."}
-              disabled={isWaiting}
-              className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-[13px] text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500/50 transition-all disabled:opacity-50"
-            />
+          <div className="flex items-end gap-2">
+            <div className="flex-1 flex items-end gap-2 px-3 py-2 rounded-[22px] bg-[#23262e] border border-white/[0.07] transition-all duration-200">
+              <input
+                type="text"
+                value={inputText}
+                onChange={e => { setInputText(e.target.value); setInputError(''); }}
+                onKeyDown={e => e.key === 'Enter' && send()}
+                placeholder={isWaiting ? "Waiting for members..." : "Message…"}
+                disabled={isWaiting}
+                className="flex-1 bg-transparent text-[13.5px] text-white placeholder:text-neutral-600 focus:outline-none transition-all disabled:opacity-50"
+              />
+            </div>
             <button
               onClick={send}
               disabled={!inputText.trim() || isWaiting}
-              className="w-11 h-11 shrink-0 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:hover:bg-indigo-500 text-white rounded-xl flex items-center justify-center transition-colors"
+              className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                inputText.trim() && !isWaiting
+                  ? 'bg-emerald-500 shadow-lg shadow-emerald-900/60 hover:bg-emerald-400'
+                  : 'bg-[#23262e] border border-white/8 opacity-40 cursor-not-allowed'
+              }`}
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 text-white" strokeWidth={2.5} />
             </button>
           </div>
         </div>
@@ -406,8 +412,8 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
               className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
             >
               <div className="bg-neutral-900 border border-white/10 p-6 rounded-3xl text-center max-w-sm w-full shadow-2xl">
-                <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-                  <Users className="w-6 h-6 text-indigo-400" />
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-6 h-6 text-emerald-400" />
                 </div>
                 <h3 className="text-lg font-black text-white mb-2">Waiting for Members</h3>
                 <p className="text-sm text-neutral-400">Minimum 2 members are required to start chatting in this room.</p>

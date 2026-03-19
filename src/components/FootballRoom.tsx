@@ -320,8 +320,7 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
       <div className="h-px bg-white/[0.07] shrink-0" />
 
       {/* Chat — bottom */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative bg-[#111214]">
         <div ref={scrollRef}
              className="flex-1 overflow-y-auto px-3 py-3 space-y-1"
              style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -331,38 +330,55 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.12 }}
+              className={`flex flex-col ${entry.type === 'system' ? 'items-center my-2' : entry.name === userName ? 'items-end' : 'items-start'}`}
             >
               {entry.type === 'system' ? (
-                <p className="text-center text-[10px] text-neutral-600 py-0.5">{entry.text}</p>
+                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest bg-white/[0.03] px-3 py-1 rounded-full">
+                  {entry.text}
+                </span>
               ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-[11px] font-bold shrink-0 ${entry.name === userName ? 'text-emerald-400' : 'text-sky-400'}`}>
-                    {entry.name}
-                  </span>
-                  <span className="text-[13px] text-neutral-200 leading-snug break-words min-w-0">
+                <div className={`max-w-[85%] ${entry.name === userName ? 'items-end' : 'items-start'} flex flex-col`}>
+                  {entry.name !== userName && (
+                    <span className="text-[10px] font-bold text-neutral-500 ml-1 mb-0.5">{entry.name}</span>
+                  )}
+                  <div className={`px-3.5 py-2 rounded-2xl text-[13.5px] leading-relaxed relative shadow-md ${
+                    entry.name === userName
+                      ? 'bg-[#2b5c3f] text-white rounded-tr-sm shadow-emerald-950/50'
+                      : 'bg-[#1e2026] text-[#e8eaf0] rounded-tl-sm border border-white/[0.06] shadow-black/40'
+                  }`}>
                     {entry.text}
-                  </span>
-                  <span className="text-[9px] text-neutral-700 shrink-0 ml-auto">
-                    {new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                    <div className={`flex items-center gap-1 mt-1 ${entry.name === userName ? 'justify-end' : 'justify-start'}`}>
+                      <span className="text-[9px] text-white/20">
+                        {new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </motion.div>
           ))}
           {typingUsers.length > 0 && (
-            <p className="text-[10px] text-neutral-600 italic">
-              {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing…
-            </p>
+            <div className="flex justify-start mt-2">
+              <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-[#1e2026] border border-white/[0.06]">
+                <div className="flex gap-1 items-end h-2">
+                  {[0, 1, 2].map(i => (
+                    <motion.span key={i}
+                      animate={{ y: [0, -3, 0] }}
+                      transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                      className="block w-1 h-1 rounded-full bg-neutral-500"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
         {/* Input */}
-        <div className="shrink-0 px-3 pb-3 pt-2 border-t border-white/[0.06]"
-             style={{ background: '#13151a' }}>
-          {inputError && <p className="text-[10px] text-red-400 mb-1.5">{inputError}</p>}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-[18px]"
-                 style={{ background: '#23262e', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="shrink-0 px-3 pb-3 pt-2 border-t border-white/[0.06] bg-[#161719]">
+          {inputError && <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-2 ml-1">{inputError}</p>}
+          <div className="flex items-end gap-2">
+            <div className="flex-1 flex items-end gap-2 px-3 py-2 rounded-[22px] bg-[#23262e] border border-white/[0.07] transition-all duration-200">
               <input
                 ref={inputRef}
                 type="text"
@@ -371,10 +387,10 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
                 onKeyDown={e => { if (e.key === 'Enter') send(); }}
                 maxLength={CHAT_LIMIT + 5}
                 placeholder="Say something…"
-                className="flex-1 bg-transparent text-[13px] text-white focus:outline-none placeholder:text-neutral-600"
+                className="flex-1 bg-transparent text-[13.5px] text-white focus:outline-none placeholder:text-neutral-600"
               />
               {inputText.length > CHAT_LIMIT - 30 && (
-                <span className={`text-[9px] font-mono shrink-0 ${charsLeft < 10 ? 'text-red-400' : 'text-yellow-500/60'}`}>
+                <span className={`text-[9px] font-mono self-end mb-0.5 shrink-0 ${charsLeft < 10 ? 'text-red-400' : 'text-yellow-500/60'}`}>
                   {charsLeft}
                 </span>
               )}
@@ -384,10 +400,10 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
               onClick={send}
               disabled={!inputText.trim()}
               whileTap={{ scale: 0.88 }}
-              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer
+              className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer
                 ${inputText.trim()
-                  ? 'bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-900/50'
-                  : 'bg-white/[0.06] border border-white/[0.08] opacity-40 cursor-not-allowed'}`}
+                  ? 'bg-emerald-500 shadow-lg shadow-emerald-900/60 hover:bg-emerald-400'
+                  : 'bg-[#23262e] border border-white/8 opacity-40 cursor-not-allowed'}`}
             >
               <Send className="w-4 h-4 text-white" strokeWidth={2.5} />
             </motion.button>

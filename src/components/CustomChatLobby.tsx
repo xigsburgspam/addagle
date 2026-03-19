@@ -173,8 +173,8 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.07]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
-              <Users className="w-4 h-4 text-indigo-400" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+              <Users className="w-4 h-4 text-emerald-400" />
             </div>
             <div>
               <h2 className="text-base font-black text-white uppercase tracking-wider">
@@ -208,12 +208,12 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
                   value={userName}
                   onChange={e => setUserName(e.target.value)}
                   placeholder="Enter a unique name..."
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all mb-4"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all mb-4"
                   maxLength={20}
                   autoFocus
                 />
                 {error && <p className="text-red-400 text-xs mb-4">{error}</p>}
-                <button type="submit" className="w-full py-3.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors">
+                <button type="submit" className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors">
                   Continue
                 </button>
               </motion.form>
@@ -221,9 +221,9 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
 
             {step === 'action' && (
               <motion.div key="action" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className="flex flex-col gap-3">
-                <button onClick={() => onJoinGlobal(userName)} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-2xl flex items-center gap-4 hover:border-indigo-500/50 hover:bg-indigo-500/10 transition-all text-left group">
-                  <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                    <Globe className="w-5 h-5 text-indigo-400" />
+                <button onClick={() => onJoinGlobal(userName)} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-2xl flex items-center gap-4 hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all text-left group">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <Globe className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-white">Join Global Chat</h3>
@@ -276,7 +276,7 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
                     value={roomName}
                     onChange={e => setRoomName(e.target.value)}
                     placeholder="e.g. MyRoom"
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                     maxLength={12}
                     autoFocus
                   />
@@ -290,7 +290,7 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
                     max="15"
                     value={maxMembers}
                     onChange={e => setMaxMembers(parseInt(e.target.value))}
-                    className="w-full accent-indigo-500"
+                    className="w-full accent-emerald-500"
                   />
                   <div className="flex justify-between text-[10px] text-neutral-500 mt-1">
                     <span>2</span>
@@ -314,7 +314,7 @@ export const CustomChatLobby: React.FC<CustomChatLobbyProps> = ({ onClose, onJoi
                   value={roomName}
                   onChange={e => setRoomName(e.target.value)}
                   placeholder="Enter room name..."
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all mb-4"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all mb-4"
                   maxLength={12}
                   autoFocus
                 />
