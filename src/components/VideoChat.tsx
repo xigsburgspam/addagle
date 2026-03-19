@@ -55,11 +55,11 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
   const joinSoundRef = useRef<AudioContext | null>(null);
   const disconnectSoundRef = useRef<AudioContext | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [reportReason, setReportReason] = useState('');
-  const [shouldBlock, setShouldBlock] = useState(false);
 
   const [showChat, setShowChat] = useState(false);
+  const [videoTimer, setVideoTimer] = useState(300); // 5 min in seconds
+  const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
@@ -315,6 +315,28 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
     }
   }, [isConnected, remoteStream]);
 
+  // 5-minute auto-skip timer for video calls
+  useEffect(() => {
+    if (mode !== 'video') return;
+    if (isConnected) {
+      setVideoTimer(300);
+      videoTimerRef.current = setInterval(() => {
+        setVideoTimer(prev => {
+          if (prev <= 1) {
+            clearInterval(videoTimerRef.current!);
+            handleNext();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (videoTimerRef.current) clearInterval(videoTimerRef.current);
+      setVideoTimer(300);
+    }
+    return () => { if (videoTimerRef.current) clearInterval(videoTimerRef.current); };
+  }, [isConnected, mode]);
+
   useEffect(() => {
     const getCameras = async () => {
       try {
@@ -547,39 +569,22 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         reporterId: user.uid,
         reporterEmail: user.email,
         reportedId: partnerUidRef.current,
-        reportedEmail: partnerEmailRef.current,
+        violatorUid: partnerUidRef.current,
+        violatorEmail: partnerEmailRef.current,
+        violatorName: partnerEmailRef.current,
         reason: reportReason,
         timestamp: Timestamp.now(),
         roomId: roomId
       });
-      
       setShowReportModal(false);
-      
-      // Check if reported user is admin
-      const isPartnerAdmin = partnerEmailRef.current === 'edublitz71@gmail.com';
-      if (!isPartnerAdmin) {
-        setShowBlockConfirm(true);
-      } else {
-        alert(t.reportSuccess);
-        setReportReason('');
-        handleNext();
-      }
+      setReportReason('');
+      handleNext();
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'reports');
     }
   };
 
-  const handleBlock = (block: boolean) => {
-    if (block && partnerUidRef.current && user) {
-      socket?.emit('block-user', { 
-        blockedId: partnerUidRef.current,
-        blockedEmail: partnerEmailRef.current
-      });
-    }
-    setShowBlockConfirm(false);
-    setReportReason('');
-    handleNext();
-  };
+
 
   return (
     <div className="flex flex-col h-[100dvh] bg-neutral-950 text-white overflow-hidden font-sans selection:bg-emerald-500/30">
@@ -724,46 +729,6 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
         )}
       </AnimatePresence>
 
-      {/* Block Confirmation Modal */}
-      <AnimatePresence>
-        {showBlockConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[115] bg-neutral-950/90 backdrop-blur-xl flex items-center justify-center p-6"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-[40px] p-8 shadow-2xl"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <UserCheck className="w-6 h-6 text-emerald-500" />
-                <h2 className="text-xl font-black uppercase tracking-tighter">Block User?</h2>
-              </div>
-              <p className="text-sm text-neutral-400 mb-8 leading-relaxed">
-                Report submitted successfully. Would you also like to block this user? You will never be matched with them again.
-              </p>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => handleBlock(false)}
-                  className="flex-1 py-4 bg-neutral-800 hover:bg-neutral-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
-                >
-                  No
-                </button>
-                <button
-                  onClick={() => handleBlock(true)}
-                  className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-emerald-500/20"
-                >
-                  Yes, Block
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Report Modal */}
       <AnimatePresence>
         {showReportModal && (
@@ -898,6 +863,16 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
                 playsInline
                 className={`w-full h-full object-contain ${!isConnected ? 'hidden' : ''}`}
               />
+
+              {/* 5-min session countdown */}
+              {isConnected && (
+                <div className="absolute top-3 left-3 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 shadow-lg">
+                  <div className={`w-2 h-2 rounded-full ${videoTimer <= 30 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                  <span className={`text-xs font-mono font-black ${videoTimer <= 30 ? 'text-red-400' : 'text-white'}`}>
+                    {Math.floor(videoTimer / 60)}:{String(videoTimer % 60).padStart(2, '0')}
+                  </span>
+                </div>
+              )}
 
               <AnimatePresence>
                 {isAdminConnected && (

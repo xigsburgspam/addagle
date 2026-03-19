@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 import { BANNED_WORDS, containsBanned } from '../constants';
 
-const CHAR_LIMIT      = 200;
+const CHAR_LIMIT      = 2599;
 const SWIPE_THRESHOLD = 58;
 const REACTIONS       = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
