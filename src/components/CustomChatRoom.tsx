@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { ArrowLeft, Send, Users, ShieldAlert, Clock, AlertCircle, Reply, Smile, X } from 'lucide-react';
+import { ArrowLeft, Send, Users, ShieldAlert, Clock, AlertCircle, Reply, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFirebase } from '../FirebaseContext';
 import { getDistrict } from '../utils/location';
@@ -25,7 +25,6 @@ interface ChatEntry {
   text: string;
   ts: number;
   replyTo?: { name: string; text: string };
-  reactions?: { [emoji: string]: string[] };
 }
 
 const VIOLATION_OPTIONS = [
@@ -50,7 +49,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
   const [reportReason, setReportReason] = useState('');
   const [reportStatus, setReportStatus] = useState('');
   const [replyTo, setReplyTo] = useState<{ name: string; text: string } | null>(null);
-  const [activeEmojiMenu, setActiveEmojiMenu] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -104,22 +102,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
 
     sock.on('custom-chat', ({ id, name, text, ts, replyTo }) => {
       addEntry({ id: id || Math.random().toString(36).slice(2), type: 'msg', name, text, ts, replyTo });
-    });
-
-    sock.on('custom-react', ({ messageId, emoji, name }) => {
-      setEntries(prev => prev.map(entry => {
-        if (entry.id === messageId) {
-          const reactions = { ...(entry.reactions || {}) };
-          if (!reactions[emoji]) reactions[emoji] = [];
-          if (!reactions[emoji].includes(name)) {
-            reactions[emoji].push(name);
-          } else {
-            reactions[emoji] = reactions[emoji].filter(n => n !== name);
-          }
-          return { ...entry, reactions };
-        }
-        return entry;
-      }));
     });
 
     sock.on('custom-system', (text) => {
@@ -177,25 +159,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
     setInputError('');
     setReplyTo(null);
   }, [inputText, socket, roomData.userName, replyTo]);
-
-  const react = (messageId: string, emoji: string) => {
-    if (!socket) return;
-    socket.emit('custom-react', { messageId, emoji });
-    // Optimistic update
-    setEntries(prev => prev.map(entry => {
-      if (entry.id === messageId) {
-        const reactions = { ...(entry.reactions || {}) };
-        if (!reactions[emoji]) reactions[emoji] = [];
-        if (!reactions[emoji].includes(roomData.userName)) {
-          reactions[emoji].push(roomData.userName);
-        } else {
-          reactions[emoji] = reactions[emoji].filter(n => n !== roomData.userName);
-        }
-        return { ...entry, reactions };
-      }
-      return entry;
-    }));
-  };
 
   const handleReport = (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,24 +248,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                         <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
                           <Reply className="w-3 h-3 text-neutral-400" />
                         </button>
-                        <div className="relative">
-                          <button onClick={() => setActiveEmojiMenu(activeEmojiMenu === entry.id ? null : entry.id)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                            <Smile className="w-3 h-3 text-neutral-400" />
-                          </button>
-                          {activeEmojiMenu === entry.id && (
-                            <div className="absolute bottom-full right-0 mb-2 p-1 bg-[#1e2128] border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
-                              {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
-                                <button
-                                  key={emoji}
-                                  onClick={() => { react(entry.id, emoji); setActiveEmojiMenu(null); }}
-                                  className="w-9 h-9 flex items-center justify-center rounded-xl text-[1.25rem] hover:bg-white/10 active:scale-90 transition-all duration-100 cursor-pointer"
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
                       </div>
                     )}
 
@@ -312,22 +257,6 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                         : 'bg-[#1e2026] text-[#e8eaf0] rounded-tl-sm border border-white/[0.06] shadow-black/40'
                     }`}>
                       {entry.text}
-                      
-                      {/* Reactions display */}
-                      {entry.reactions && Object.keys(entry.reactions).length > 0 && (
-                        <div className={`absolute -bottom-3 flex flex-wrap gap-1 ${entry.name === roomData.userName ? 'right-0' : 'left-0'}`}>
-                          {Object.entries(entry.reactions).map(([emoji, users]) => (
-                            <button
-                              key={emoji}
-                              onClick={() => react(entry.id, emoji)}
-                              className="px-1.5 py-0.5 bg-[#1a1c22] border border-white/10 rounded-full text-[10px] flex items-center gap-1 hover:bg-neutral-800 transition-colors shadow-lg"
-                            >
-                              <span>{emoji}</span>
-                              <span className="text-neutral-500">{(users as string[]).length}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
                     {entry.name !== roomData.userName && (
@@ -335,28 +264,9 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
                         <button onClick={() => setReplyTo({ name: entry.name!, text: entry.text })} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
                           <Reply className="w-3 h-3 text-neutral-400" />
                         </button>
-                        <div className="relative">
-                          <button onClick={() => setActiveEmojiMenu(activeEmojiMenu === entry.id ? null : entry.id)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                            <Smile className="w-3 h-3 text-neutral-400" />
-                          </button>
-                          {activeEmojiMenu === entry.id && (
-                            <div className="absolute bottom-full left-0 mb-2 p-1 bg-[#1e2128] border border-white/10 rounded-xl shadow-2xl flex items-center gap-1 z-20">
-                              {['❤️', '😂', '😮', '😢', '🔥', '👍'].map(emoji => (
-                                <button
-                                  key={emoji}
-                                  onClick={() => { react(entry.id, emoji); setActiveEmojiMenu(null); }}
-                                  className="w-9 h-9 flex items-center justify-center rounded-xl text-[1.25rem] hover:bg-white/10 active:scale-90 transition-all duration-100 cursor-pointer"
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
                       </div>
                     )}
                   </div>
-                  <div className="h-4" /> {/* Spacer for reactions */}
                 </div>
               )}
             </motion.div>

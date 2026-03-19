@@ -5,16 +5,28 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, setDoc, addDoc, increment } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, getDoc, doc, setDoc, addDoc, increment } from 'firebase/firestore';
+import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 
 // Load firebase config — resolve relative to source root, works in both dev and prod
 const configPath = new URL('./firebase-applet-config.json', import.meta.url);
 const firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
 
-// Initialize Firebase (only once)
+// Initialize Firebase Client SDK (for some client-side like logic if needed, but mostly for config)
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firebase Admin SDK for server-side operations (bypasses rules)
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: firebaseConfig.projectId,
+    // databaseId is used for named databases in admin SDK
+    // @ts-ignore
+    databaseId: firebaseConfig.firestoreDatabaseId
+  });
+}
+const adminDb = admin.firestore();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,14 +104,25 @@ async function startServer() {
   const rooms = new Map<string, { type: 'video' | 'text', users: string[], peerIds: Map<string, string>, metadata: Map<string, { uid: string, email: string, isAdmin: boolean }> }>();
   const districtUsers = new Map<string, number>(); // districtName -> count
   const reportedPairs = new Set<string>();
+  const blockedPairs = new Set<string>();
+  const userVideoChatStats = new Map<string, { count: number, lastDate: string }>();
+  const activeMatchStartTimes = new Map<string, number>();
+  const sessionTimeouts = new Map<string, NodeJS.Timeout>();
 
-  // Load reports on startup
-  getDocs(collection(db, 'reports')).then(snapshot => {
+  // Load reports and blocks on startup using Admin SDK
+  adminDb.collection('reports').get().then(snapshot => {
     snapshot.forEach(doc => {
       const data = doc.data();
       reportedPairs.add(`${data.reporterId}:${data.reportedId}`);
     });
   }).catch(e => console.error('Failed to load reports:', e.message));
+
+  adminDb.collection('blocks').get().then(snapshot => {
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      blockedPairs.add(`${data.blockerId}:${data.blockedId}`);
+    });
+  }).catch(e => console.error('Failed to load blocks:', e.message));
 
   let totalVideoChats = 0;
   let totalTextChats = 0;
@@ -159,7 +182,7 @@ async function startServer() {
         district,
         maxMembers: 15,
         users: [],
-        expiresAt: Date.now() + 15 * 60 * 1000 // 15 minutes
+        expiresAt: Date.now() + 7 * 60 * 1000 // 7 minutes
       };
       customRooms.set(roomId, room);
     }
@@ -183,7 +206,7 @@ async function startServer() {
 
     // Increment total text chats
     totalTextChats++;
-    setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
+    adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
   };
 
   // Timer interval for custom rooms
@@ -198,6 +221,37 @@ async function startServer() {
     }
   }, 5000);
 
+  // Helper to check video chat limit
+  const checkVideoLimit = async (uid: string, isAdmin: boolean) => {
+    if (isAdmin) return { allowed: true, count: 0 };
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Check in-memory first
+    let stats = userVideoChatStats.get(uid);
+    if (!stats || stats.lastDate !== today) {
+      // Fetch from Firestore using Admin SDK
+      try {
+        const docSnap = await adminDb.collection('videoStats').doc(uid).get();
+        if (docSnap.exists) {
+          const data = docSnap.data() as any;
+          if (data.lastDate === today) {
+            stats = { count: data.count, lastDate: data.lastDate };
+          } else {
+            stats = { count: 0, lastDate: today };
+          }
+        } else {
+          stats = { count: 0, lastDate: today };
+        }
+        userVideoChatStats.set(uid, stats);
+      } catch (e) {
+        console.error('Failed to fetch video stats:', e);
+        stats = stats || { count: 0, lastDate: today };
+      }
+    }
+    
+    return { allowed: stats.count < 7, count: stats.count };
+  };
+
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
@@ -210,14 +264,60 @@ async function startServer() {
     });
 
     // Join matchmaking queue
-    socket.on('join-queue', ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
+    socket.on('join-queue', async ({ peerId, uid, email, isAdmin, mode }: { peerId: string, uid: string, email: string, isAdmin: boolean, mode: 'video' | 'text' }) => {
       console.log('User joined queue:', socket.id, 'Mode:', mode, 'Peer:', peerId, 'UID:', uid, 'Admin:', isAdmin);
+
+      if (mode === 'video') {
+        const limit = await checkVideoLimit(uid, isAdmin);
+        if (!limit.allowed) {
+          socket.emit('custom-error', 'You have reached your daily limit of 7 video chats.');
+          return;
+        }
+        socket.emit('video-stats', { count: limit.count });
+      }
 
       userModes.set(socket.id, mode);
 
       // If already in a match, clean it up
       const currentPartner = activeMatches.get(socket.id);
       if (currentPartner) {
+        const partnerSocket = io.sockets.sockets.get(currentPartner);
+        if (partnerSocket) {
+          const roomId = (partnerSocket as any)._roomId;
+          if (roomId) {
+            const startTime = activeMatchStartTimes.get(roomId);
+            if (startTime) {
+              const duration = (Date.now() - startTime) / 1000;
+              if (duration >= 40) {
+                // Increment counts
+                const myUid = uid;
+                const partnerUid = (partnerSocket as any)._uid;
+                const myIsAdmin = isAdmin;
+                const partnerIsAdmin = (partnerSocket as any)._isAdmin;
+                
+                if (!myIsAdmin) {
+                  const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                  stats.count++;
+                  userVideoChatStats.set(myUid, stats);
+                  adminDb.collection('videoStats').doc(myUid).set(stats, { merge: true }).catch(() => {});
+                }
+                if (!partnerIsAdmin && partnerUid) {
+                  const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                  stats.count++;
+                  userVideoChatStats.set(partnerUid, stats);
+                  adminDb.collection('videoStats').doc(partnerUid).set(stats, { merge: true }).catch(() => {});
+                }
+              }
+              activeMatchStartTimes.delete(roomId);
+              const timeout = sessionTimeouts.get(roomId);
+              if (timeout) {
+                clearTimeout(timeout);
+                sessionTimeouts.delete(roomId);
+              }
+            }
+          }
+        }
+
         io.to(currentPartner).emit('partner-skipped');
         activeMatches.delete(currentPartner);
         activeMatches.delete(socket.id);
@@ -227,10 +327,12 @@ async function startServer() {
       let waitingUser = isVideo ? waitingVideoUser : waitingTextUser;
 
       if (waitingUser && waitingUser.socketId !== socket.id) {
-        // Check if they reported each other
-        if (reportedPairs.has(`${uid}:${waitingUser.uid}`) || reportedPairs.has(`${waitingUser.uid}:${uid}`)) {
+        // Check if they reported each other or blocked each other
+        if (reportedPairs.has(`${uid}:${waitingUser.uid}`) || reportedPairs.has(`${waitingUser.uid}:${uid}`) ||
+            blockedPairs.has(`${uid}:${waitingUser.uid}`) || blockedPairs.has(`${waitingUser.uid}:${uid}`)) {
           // Don't match
-          socket.emit('custom-error', 'Cannot match with this user due to previous reports.');
+          // If it was the only one in queue, we just stay in queue
+          // But we need to keep waitingUser as waiting
           return;
         }
 
@@ -244,7 +346,18 @@ async function startServer() {
         activeMatches.set(partner.socketId, socket.id);
 
         socket.join(roomId);
-        io.sockets.sockets.get(partner.socketId)?.join(roomId);
+        const partnerSocket = io.sockets.sockets.get(partner.socketId);
+        partnerSocket?.join(roomId);
+
+        // Store metadata on sockets for easier access on disconnect
+        (socket as any)._roomId = roomId;
+        (socket as any)._uid = uid;
+        (socket as any)._isAdmin = isAdmin;
+        if (partnerSocket) {
+          (partnerSocket as any)._roomId = roomId;
+          (partnerSocket as any)._uid = partner.uid;
+          (partnerSocket as any)._isAdmin = partner.isAdmin;
+        }
 
         const peerIdsMap = new Map();
         peerIdsMap.set(socket.id, peerId);
@@ -261,14 +374,51 @@ async function startServer() {
           metadata: metadataMap
         });
 
-        if (isVideo) totalVideoChats++;
-        else totalTextChats++;
+        if (isVideo) {
+          totalVideoChats++;
+          activeMatchStartTimes.set(roomId, Date.now());
+          // Set a 5-minute timer to end the match
+        const timeoutTime = isVideo ? 5 * 60 * 1000 : 7 * 60 * 1000;
+        const timeout = setTimeout(() => {
+          if (activeMatches.has(socket.id) && activeMatches.get(socket.id) === partner.socketId) {
+            io.to(roomId).emit('session-timeout');
+            // Clean up
+            socket.leave(roomId);
+            partnerSocket?.leave(roomId);
+            activeMatches.delete(socket.id);
+            activeMatches.delete(partner.socketId);
+            // Handle count if >= 40s (which it is)
+            if (isVideo) {
+              if (!isAdmin) {
+                const stats = userVideoChatStats.get(uid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                stats.count++;
+                userVideoChatStats.set(uid, stats);
+                adminDb.collection('videoStats').doc(uid).set(stats, { merge: true }).catch(() => {});
+              }
+              if (partnerSocket && !(partnerSocket as any)._isAdmin) {
+                const partnerUid = (partnerSocket as any)._uid;
+                if (partnerUid) {
+                  const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                  stats.count++;
+                  userVideoChatStats.set(partnerUid, stats);
+                  adminDb.collection('videoStats').doc(partnerUid).set(stats, { merge: true }).catch(() => {});
+                }
+              }
+            }
+            activeMatchStartTimes.delete(roomId);
+            sessionTimeouts.delete(roomId);
+          }
+        }, timeoutTime);
+        sessionTimeouts.set(roomId, timeout);
+        } else {
+          totalTextChats++;
+        }
 
-        // Persist to Firestore
-        setDoc(doc(db, 'stats', 'global'),
+        // Persist to Firestore using Admin SDK
+        adminDb.collection('stats').doc('global').set(
           isVideo
-            ? { totalVideoChats: increment(1) }
-            : { totalTextChats: increment(1) },
+            ? { totalVideoChats: admin.firestore.FieldValue.increment(1) }
+            : { totalTextChats: admin.firestore.FieldValue.increment(1) },
           { merge: true }
         ).catch((e: Error) => console.error('Firestore stats update failed:', e));
 
@@ -296,6 +446,30 @@ async function startServer() {
         if (isVideo) waitingVideoUser = { socketId: socket.id, peerId, uid, email, isAdmin };
         else waitingTextUser = { socketId: socket.id, peerId, uid, email, isAdmin };
       }
+    });
+
+    socket.on('block-user', async ({ blockerId, blockedId }) => {
+      if (!blockerId || !blockedId) return;
+      // Cannot block admin
+      const adminEmail = 'edublitz71@gmail.com';
+      // We don't have the blocked user's email here easily, but we can check if they are admin in the active match
+      const partnerSocketId = activeMatches.get(socket.id);
+      if (partnerSocketId) {
+        const partnerSocket = io.sockets.sockets.get(partnerSocketId);
+        if (partnerSocket && (partnerSocket as any)._isAdmin) {
+          socket.emit('custom-error', 'You cannot block an admin.');
+          return;
+        }
+      }
+
+      blockedPairs.add(`${blockerId}:${blockedId}`);
+      try {
+        await adminDb.collection('blocks').add({
+          blockerId,
+          blockedId,
+          timestamp: Date.now()
+        });
+      } catch (e) {}
     });
 
     // Chat
@@ -403,7 +577,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('football-message', ({ matchId, text }: { matchId: string; text: string }) => {
@@ -450,7 +624,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-create', ({ roomName, maxMembers, mode, district, name, uid, email }) => {
@@ -473,7 +647,7 @@ async function startServer() {
         district,
         maxMembers,
         users: [{ socketId: socket.id, name, uid, email }],
-        expiresAt: Date.now() + 15 * 60 * 1000 // 15 minutes
+        expiresAt: Date.now() + 7 * 60 * 1000 // 7 minutes
       };
       customRooms.set(roomName, newRoom);
       (socket as any)._customRoom = roomName;
@@ -484,7 +658,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-join', ({ roomName, name, uid, email }) => {
@@ -518,7 +692,7 @@ async function startServer() {
 
       // Increment total text chats
       totalTextChats++;
-      setDoc(doc(db, 'stats', 'global'), { totalTextChats: increment(1) }, { merge: true }).catch(() => {});
+      adminDb.collection('stats').doc('global').set({ totalTextChats: admin.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
     });
 
     socket.on('custom-join-district', ({ district, name, uid, email }) => {
@@ -546,12 +720,6 @@ async function startServer() {
       socket.to(`custom:${roomId}`).emit('custom-chat', { id, name, text, ts: Date.now(), replyTo });
     });
 
-    socket.on('custom-react', ({ messageId, emoji }) => {
-      const roomId = (socket as any)._customRoom;
-      if (!roomId) return;
-      socket.to(`custom:${roomId}`).emit('custom-react', { messageId, emoji, name: (socket as any)._customName });
-    });
-
     socket.on('custom-report', async ({ violatorName, reason }) => {
       const roomId = (socket as any)._customRoom;
       const reporterName = (socket as any)._customName;
@@ -565,7 +733,7 @@ async function startServer() {
 
       if (violator && reporter) {
         try {
-          await addDoc(collection(db, 'reports'), {
+          await adminDb.collection('reports').add({
             reporterId: reporter.uid || 'anonymous',
             reporterEmail: reporter.email || 'anonymous',
             reporterName: reporter.name,
@@ -635,6 +803,40 @@ async function startServer() {
 
       const partnerId = activeMatches.get(socket.id);
       if (partnerId) {
+        const roomId = (socket as any)._roomId;
+        if (roomId) {
+          const startTime = activeMatchStartTimes.get(roomId);
+          if (startTime) {
+            const duration = (Date.now() - startTime) / 1000;
+            if (duration >= 40) {
+              const myUid = (socket as any)._uid;
+              const myIsAdmin = (socket as any)._isAdmin;
+              const partnerSocket = io.sockets.sockets.get(partnerId);
+              const partnerUid = partnerSocket ? (partnerSocket as any)._uid : null;
+              const partnerIsAdmin = partnerSocket ? (partnerSocket as any)._isAdmin : false;
+
+              if (myUid && !myIsAdmin) {
+                const stats = userVideoChatStats.get(myUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                stats.count++;
+                userVideoChatStats.set(myUid, stats);
+                setDoc(doc(db, 'videoStats', myUid), stats, { merge: true }).catch(() => {});
+              }
+              if (partnerUid && !partnerIsAdmin) {
+                const stats = userVideoChatStats.get(partnerUid) || { count: 0, lastDate: new Date().toISOString().split('T')[0] };
+                stats.count++;
+                userVideoChatStats.set(partnerUid, stats);
+                setDoc(doc(db, 'videoStats', partnerUid), stats, { merge: true }).catch(() => {});
+              }
+            }
+            activeMatchStartTimes.delete(roomId);
+            const timeout = sessionTimeouts.get(roomId);
+            if (timeout) {
+              clearTimeout(timeout);
+              sessionTimeouts.delete(roomId);
+            }
+          }
+        }
+
         io.to(partnerId).emit('partner-disconnected');
         activeMatches.delete(partnerId);
         activeMatches.delete(socket.id);
@@ -688,6 +890,22 @@ async function startServer() {
       totalTextChats,
       districtUsers: Object.fromEntries(districtUsers)
     });
+  });
+
+  app.get('/api/user-video-stats/:uid', async (req, res) => {
+    const { uid } = req.params;
+    let isAdmin = false;
+    try {
+      const userDoc = await adminDb.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        isAdmin = userData?.role === 'admin' || userData?.email === 'edublitz71@gmail.com';
+      }
+    } catch (e) {
+      console.error('Failed to check admin status for stats:', e);
+    }
+    const limit = await checkVideoLimit(uid, isAdmin);
+    res.json(limit);
   });
 
   app.get('/api/active-rooms', (req, res) => {
