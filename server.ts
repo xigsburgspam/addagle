@@ -401,7 +401,7 @@ async function startServer() {
           activeMatchStartTimes.set(roomId, Date.now());
           // Set a 5-minute timer to end the match
         const timeoutTime = isVideo ? 5 * 60 * 1000 : 7 * 60 * 1000;
-        const timeout = setTimeout(() => {
+        const timeout = setTimeout(async () => {
           if (activeMatches.has(socket.id) && activeMatches.get(socket.id) === partner.socketId) {
             io.to(roomId).emit('session-timeout');
             // Clean up
