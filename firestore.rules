@@ -51,16 +51,13 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (
-          request.auth.token.email == "edublitz71@gmail.com" ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-        );
+        request.auth.token.email == "edublitz71@gmail.com";
     }
 
     function isNotBlocked() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return !('isBlocked' in userDoc.data) || userDoc.data.isBlocked == false;
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+             !('isBlocked' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked == false;
     }
 
     function isValidUser(data) {
@@ -99,12 +96,20 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
+      // Any authenticated user can read their own doc; admins can read all
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
-                    (request.resource.data.role == 'user' || (request.resource.data.role == 'admin' && request.auth.token.email == "edublitz71@gmail.com"));
-      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && 
-                    request.resource.data.role == resource.data.role && 
-                    request.resource.data.isBlocked == resource.data.isBlocked));
+      // User can create their own doc if it's valid and role matches
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) &&
+                    (request.resource.data.role == 'user' ||
+                     (request.resource.data.role == 'admin' && request.auth.token.email == "edublitz71@gmail.com"));
+      // Owners can update their own doc (tokens, display name, etc.) but cannot change role or blocked status
+      // Admins can update anything
+      allow update: if isAuthenticated() && (
+                      isAdmin() ||
+                      (isOwner(userId) &&
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.isBlocked == resource.data.isBlocked)
+                    );
     }
 
     match /reports/{reportId} {

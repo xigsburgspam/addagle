@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { ArrowLeft, Send, Users, ShieldAlert, Clock, AlertCircle, Reply, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFirebase } from '../FirebaseContext';
-import { db, doc, updateDoc } from '../firebase';
+import { db, doc, updateDoc, runTransaction } from '../firebase';
 import { getDistrict } from '../utils/location';
 import { containsBanned } from '../constants';
 
@@ -38,7 +38,7 @@ const VIOLATION_OPTIONS = [
 ];
 
 export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeave }) => {
-  const { user, userData } = useFirebase();
+  const { user } = useFirebase();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [inputText, setInputText] = useState('');
@@ -61,20 +61,26 @@ export const CustomChatRoom: React.FC<CustomChatRoomProps> = ({ roomData, onLeav
     const sock = io({ forceNew: true });
     setSocket(sock);
 
-    // Deduct 4 tokens for entering custom chat room
+    // Deduct 4 tokens using a transaction (reads live Firestore value, never stale)
     const deductTokens = async () => {
       if (!user) return;
-      const currentTokens = userData?.tokens ?? 100;
-      if (currentTokens < 4) {
-        alert('Not enough tokens! You need 4 tokens to join a custom chat room.');
-        onLeave();
-        return;
-      }
-      const newTokens = Math.max(0, currentTokens - 4);
       try {
-        await updateDoc(doc(db, 'users', user.uid), { tokens: newTokens });
-      } catch (e) {
-        console.error('Token deduction failed', e);
+        const userRef = doc(db, 'users', user.uid);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(userRef);
+          const current = snap.exists() ? (snap.data().tokens ?? 100) : 100;
+          if (current < 4) {
+            throw new Error('INSUFFICIENT_TOKENS');
+          }
+          tx.update(userRef, { tokens: current - 4 });
+        });
+      } catch (e: any) {
+        if (e?.message === 'INSUFFICIENT_TOKENS') {
+          alert('Not enough tokens! You need 4 tokens to join a custom chat room.');
+          onLeave();
+        } else {
+          console.error('Token deduction failed', e);
+        }
       }
     };
     deductTokens();

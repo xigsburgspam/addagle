@@ -6,7 +6,7 @@ import Peer, { MediaConnection } from 'peerjs';
 import Draggable from 'react-draggable';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, addDoc, Timestamp, doc, setDoc, increment, updateDoc } from '../firebase';
+import { db, collection, addDoc, Timestamp, doc, setDoc, increment, updateDoc, runTransaction } from '../firebase';
 import { Chat } from './Chat';
 import { StatsDisplay } from './StatsDisplay';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -200,13 +200,28 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
       partnerUidRef.current = partnerUid;
       partnerEmailRef.current = partnerEmail;
 
-      // Deduct tokens for video call (only once per match, by initiator)
-      if (initiator && mode === 'video' && !isAdmin && user) {
-        const newTokens = Math.max(0, tokensRef.current - videoCallCost);
-        tokensRef.current = newTokens;
+      // Deduct tokens for video call using a transaction (reads live value, not stale cache)
+      // Every participant pays — not just the initiator
+      if (mode === 'video' && !isAdmin && user) {
         try {
-          await updateDoc(doc(db, 'users', user.uid), { tokens: newTokens });
-        } catch (e) { console.error('Token deduction failed', e); }
+          const userRef = doc(db, 'users', user.uid);
+          await runTransaction(db, async (tx) => {
+            const snap = await tx.get(userRef);
+            const current = snap.exists() ? (snap.data().tokens ?? 100) : 100;
+            if (current < videoCallCost) {
+              throw new Error('INSUFFICIENT_TOKENS');
+            }
+            tx.update(userRef, { tokens: current - videoCallCost });
+            tokensRef.current = current - videoCallCost;
+          });
+        } catch (e: any) {
+          if (e?.message === 'INSUFFICIENT_TOKENS') {
+            setConnectionError(`Not enough tokens! You need ${videoCallCost} tokens per video call.`);
+            setTimeout(() => onExit(), 4000);
+          } else {
+            console.error('Token deduction failed', e);
+          }
+        }
       }
 
       if (initiator) {

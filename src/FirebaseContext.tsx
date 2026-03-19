@@ -57,14 +57,15 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        
-        unsubDoc = onSnapshot(userDocRef, async (docSnap) => {
-          let currentData: UserData;
-          if (docSnap.exists()) {
-            currentData = docSnap.data() as UserData;
-          } else {
-            // New user — build their document
-            currentData = {
+
+        // ── Step 1: ensure the user document exists before subscribing ──
+        // We do a one-time read first so we never hit the race where
+        // onSnapshot fires on a missing doc while isAdmin() in rules
+        // tries to get() the same missing doc and throws.
+        try {
+          const snap = await getDoc(userDocRef);
+          if (!snap.exists()) {
+            const newUser: UserData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
               displayName: firebaseUser.displayName || '',
@@ -73,29 +74,30 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               isBlocked: false,
               tokens: 100,
             };
-            try {
-              await setDoc(userDocRef, currentData);
-            } catch (e) {
-              console.error('Failed to create user doc:', e);
-              // Still set userData so the app doesn't hang on loading
-            }
-            try {
-              await updateDoc(doc(db, 'stats', 'global'), {
-                totalAccounts: increment(1)
-              });
-            } catch (e) {
-              console.error('Failed to update stats:', e);
-            }
+            await setDoc(userDocRef, newUser);
+            // Update account counter (best-effort)
+            updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
+              .catch(e => console.error('Stats update failed:', e));
           }
+        } catch (e) {
+          console.error('User doc init failed:', e);
+        }
+
+        // ── Step 2: live listener — doc is guaranteed to exist now ──
+        unsubDoc = onSnapshot(userDocRef, async (docSnap) => {
+          if (!docSnap.exists()) {
+            // Shouldn't happen, but handle gracefully
+            setLoading(false);
+            return;
+          }
+          let currentData = docSnap.data() as UserData;
 
           // Check if email is blocked
           if (firebaseUser.email) {
             try {
-              const emailBlockRef = doc(db, 'blocked_emails', firebaseUser.email);
-              const emailBlockSnap = await getDoc(emailBlockRef);
+              const emailBlockSnap = await getDoc(doc(db, 'blocked_emails', firebaseUser.email));
               if (emailBlockSnap.exists()) {
-                currentData.isEmailBlocked = true;
-                currentData.isBlocked = true;
+                currentData = { ...currentData, isEmailBlocked: true, isBlocked: true };
               }
             } catch (e) {
               console.error('Failed to check blocked email:', e);
@@ -105,7 +107,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUserData(currentData);
           setLoading(false);
         }, (error) => {
-          // Log but never throw — throwing here crashes the ErrorBoundary
           console.error('Firestore snapshot error:', error);
           setLoading(false);
         });
