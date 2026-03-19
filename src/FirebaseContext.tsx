@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db, onAuthStateChanged, doc, getDoc, setDoc, onSnapshot, updateDoc, increment, getCountFromServer, collection } from './firebase';
+import { auth, db, onAuthStateChanged, doc, getDoc, setDoc, onSnapshot, updateDoc, increment, getCountFromServer, collection, query, where, getDocs } from './firebase';
 import { User as FirebaseUser } from 'firebase/auth';
 import { handleFirestoreError, OperationType } from './utils/firestoreErrorHandler';
 
@@ -17,6 +17,8 @@ interface UserData {
   tokens?: number;
   videoCallsToday?: number;
   lastCallDate?: string;
+  inviteCode?: string;
+  seenAnnouncements?: string[];
 }
 
 interface FirebaseContextType {
@@ -79,6 +81,23 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               console.log('User doc created successfully');
               updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
                 .catch(() => {});
+              // Handle referral bonus
+              try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const refCode = urlParams.get('ref');
+                if (refCode && refCode !== inviteCode) {
+                  const refSnap = await getDocs(query(collection(db, 'users'), where('inviteCode', '==', refCode)));
+                  if (!refSnap.empty) {
+                    const referrerDoc = refSnap.docs[0];
+                    // Referrer gets 25 tokens
+                    await updateDoc(doc(db, 'users', referrerDoc.id), {
+                      tokens: (referrerDoc.data().tokens ?? 100) + 25
+                    });
+                    // New user gets 25 extra tokens (125 total)
+                    await updateDoc(userDocRef, { tokens: 125 });
+                  }
+                }
+              } catch(e) { console.error('Referral bonus failed', e); }
               return true;
             } catch (e: any) {
               console.error(`User doc init attempt ${attempt} failed:`, e?.code, e?.message);

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot } from '../firebase';
-import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, X } from 'lucide-react';
+import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot, collection, query, orderBy, updateDoc } from '../firebase';
+import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, Languages, Info, MessageCircle, Users, Video, Tv2, Map as MapIcon, Check, X, Bell, Copy, Link } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 import { AccountSection } from './AccountSection';
@@ -110,6 +110,10 @@ export const HomePage: React.FC<{
   const { language, setLanguage, t } = useLanguage();
   const [isAdminPopupOpen, setIsAdminPopupOpen] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [showAnnouncements, setShowAnnouncements] = useState(false);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [copiedInvite, setCopiedInvite] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: 'video' | 'text' | 'football' | 'custom' } | null>(null);
   const [stats, setStats] = useState({
@@ -123,6 +127,20 @@ export const HomePage: React.FC<{
     totalAccounts: 0,
     districtUsers: {} as Record<string, number>,
   });
+
+  // Load announcements and compute unread count
+  useEffect(() => {
+    const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAnnouncements(all);
+      if (userData) {
+        const seen = userData.seenAnnouncements || [];
+        setUnreadCount(all.filter((a: any) => !seen.includes(a.id)).length);
+      }
+    }, () => {});
+    return () => unsub();
+  }, [userData?.seenAnnouncements]);
 
   // Live counters from /api/stats
   useEffect(() => {
@@ -180,6 +198,24 @@ export const HomePage: React.FC<{
     } catch (e) {
       console.error('Login failed:', e);
     }
+  };
+
+  const markAnnouncementsSeen = async () => {
+    if (!user || announcements.length === 0) return;
+    const allIds = announcements.map((a: any) => a.id);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { seenAnnouncements: allIds });
+      setUnreadCount(0);
+    } catch(e) { console.error(e); }
+  };
+
+  const copyInviteLink = () => {
+    const code = userData?.inviteCode || user?.uid?.slice(0, 8).toUpperCase();
+    const link = `${window.location.origin}?ref=${code}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
+    });
   };
 
   const handleAction = async (type: 'video' | 'text' | 'football' | 'custom') => {
@@ -370,13 +406,28 @@ export const HomePage: React.FC<{
                     Signed in as <span className="text-emerald-500">{userData.savedDisplayName}</span>
                   </p>
                 )}
-                <button
-                  onClick={() => setShowAccount(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
-                >
-                  <UserCheck className="w-3 h-3" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Account</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Notification Bell */}
+                  <button
+                    onClick={() => { setShowAnnouncements(true); markAnnouncementsSeen(); }}
+                    className="relative flex items-center justify-center w-9 h-9 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all"
+                  >
+                    <Bell className="w-4 h-4" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  {/* Account Button */}
+                  <button
+                    onClick={() => setShowAccount(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 border border-white/5 rounded-xl text-neutral-400 hover:text-emerald-500 transition-all group"
+                  >
+                    <UserCheck className="w-3 h-3" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Account</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -481,6 +532,79 @@ export const HomePage: React.FC<{
         )}
         {showAccount && (
           <AccountSection onClose={() => setShowAccount(false)} />
+        )}
+
+        {/* Announcements Popup */}
+        {showAnnouncements && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}
+            onClick={() => setShowAnnouncements(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+              style={{ background: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="px-6 pt-6 pb-4 flex items-center justify-between" style={{ background: 'linear-gradient(135deg,#052e16,#0f172a)' }}>
+                <div className="flex items-center gap-3">
+                  <Bell className="w-5 h-5 text-emerald-400" />
+                  <h2 className="text-lg font-black text-white uppercase tracking-widest">Announcements</h2>
+                </div>
+                <button onClick={() => setShowAnnouncements(false)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  <X className="w-4 h-4 text-white" />
+                </button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto px-6 py-4 space-y-3">
+                {announcements.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <Bell className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
+                    <p className="text-neutral-500 text-sm font-bold uppercase tracking-widest">No announcements yet</p>
+                  </div>
+                ) : announcements.map((ann: any) => (
+                  <div key={ann.id} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <p className="text-white font-black text-sm mb-1">{ann.title}</p>
+                    <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">{ann.body}</p>
+                    <p className="text-neutral-600 text-[10px] font-mono mt-2">
+                      {ann.createdAt?.toDate?.()?.toLocaleDateString() || ''}
+                    </p>
+                  </div>
+                ))}
+
+                {/* Referral / Invite Link */}
+                {user && (
+                  <div className="rounded-2xl p-4 mt-2" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Link className="w-4 h-4 text-emerald-400" />
+                      <p className="text-emerald-400 font-black text-sm uppercase tracking-widest">Your Invite Link</p>
+                    </div>
+                    <p className="text-neutral-400 text-xs mb-3 leading-relaxed">
+                      Share your invite link. When someone creates an account using your link, <span className="text-emerald-400 font-bold">both of you get 25 bonus tokens!</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-neutral-900 rounded-xl px-3 py-2 text-xs font-mono text-neutral-300 truncate border border-neutral-800">
+                        {`${window.location.origin}?ref=${userData?.inviteCode || user.uid.slice(0,8).toUpperCase()}`}
+                      </div>
+                      <button
+                        onClick={copyInviteLink}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                        style={{ background: copiedInvite ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.07)', color: copiedInvite ? '#10b981' : '#9ca3af' }}
+                      >
+                        {copiedInvite ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        {copiedInvite ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
         )}
         {showNamePrompt && (
           <DisplayNamePrompt

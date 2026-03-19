@@ -60,7 +60,13 @@ export const AdminPanel: React.FC = () => {
   const [activeRooms,  setActiveRooms]  = useState<ActiveRoom[]>([]);
   const [users,        setUsers]        = useState<User[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users'>('reports');
+  const [activeTab,    setActiveTab]    = useState<'reports' | 'blocked' | 'matches' | 'users' | 'announcements'>('reports');
+  const [giveAllAmount, setGiveAllAmount] = useState<number>(100);
+  const [givingAll,     setGivingAll]     = useState(false);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [newAnnTitle,   setNewAnnTitle]   = useState('');
+  const [newAnnBody,    setNewAnnBody]    = useState('');
+  const [annLoading,    setAnnLoading]    = useState(false);
   const [matches,      setMatches]      = useState<FootballMatch[]>([]);
   const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '' });
   const [addingMatch,  setAddingMatch]  = useState(false);
@@ -107,11 +113,19 @@ export const AdminPanel: React.FC = () => {
       setMatches(data);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'football_matches'));
 
+    const qAnn = query(collection(db, 'announcements'));
+    const unsubAnn = onSnapshot(qAnn, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a: any, b: any) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setAnnouncements(data);
+    });
+
     return () => {
       unsubscribeReports();
       unsubscribeBlocked();
       unsubscribeMatches();
       unsubscribeUsers();
+      unsubAnn();
       clearInterval(roomInterval);
     };
   }, [isAdmin]);
@@ -168,6 +182,38 @@ export const AdminPanel: React.FC = () => {
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${targetUid}`);
     }
+  };
+
+  const giveAllTokens = async () => {
+    if (!giveAllAmount || giveAllAmount <= 0) return;
+    setGivingAll(true);
+    try {
+      await Promise.all(users.map(u =>
+        updateDoc(doc(db, 'users', u.uid), { tokens: (u.tokens ?? 100) + giveAllAmount })
+          .catch(e => console.error('Failed for', u.uid, e))
+      ));
+    } catch (e) { console.error('Give all failed', e); }
+    setGivingAll(false);
+  };
+
+  const postAnnouncement = async () => {
+    if (!newAnnTitle.trim() || !newAnnBody.trim()) return;
+    setAnnLoading(true);
+    try {
+      await addDoc(collection(db, 'announcements'), {
+        title: newAnnTitle.trim(),
+        body: newAnnBody.trim(),
+        createdAt: Timestamp.now(),
+      });
+      setNewAnnTitle('');
+      setNewAnnBody('');
+    } catch (e) { console.error('Post announcement failed', e); }
+    setAnnLoading(false);
+  };
+
+  const deleteAnnouncement = async (id: string) => {
+    if (!confirm('Delete this announcement?')) return;
+    try { await deleteDoc(doc(db, 'announcements', id)); } catch (e) { console.error(e); }
   };
 
   const addMatch = async () => {
@@ -333,6 +379,17 @@ export const AdminPanel: React.FC = () => {
             )}
           </button>
 
+          <button onClick={() => setActiveTab('announcements')}
+            className={`p-5 rounded-2xl transition-all duration-300 flex items-center justify-between ${activeTab === 'announcements' ? 'bg-emerald-500 text-black shadow-2xl shadow-emerald-500/20' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}>
+            <div className="flex items-center gap-4">
+              <MessageSquare className="w-5 h-5" />
+              <span className="font-black uppercase tracking-tighter">Announcements</span>
+            </div>
+            <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${activeTab === 'announcements' ? 'bg-black text-emerald-500' : 'bg-neutral-800 text-neutral-500'}`}>
+              {announcements.length}
+            </span>
+          </button>
+
           <button onClick={() => { window.location.href = '/'; }}
             className="w-full flex items-center justify-center gap-4 p-6 rounded-2xl bg-white text-black hover:bg-emerald-500 hover:text-white transition-all duration-300 font-black uppercase tracking-tighter shadow-xl">
             <Video className="w-6 h-6" />
@@ -418,14 +475,34 @@ export const AdminPanel: React.FC = () => {
                       Showing {filteredUsers.length} out of {users.length} total users
                     </p>
                   </div>
-                  <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-                    <input 
-                      value={userSearch}
-                      onChange={e => setUserSearch(e.target.value)}
-                      placeholder="Search users..."
-                      className="pl-12 pr-6 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition-all w-64"
-                    />
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-2xl px-4 py-2">
+                      <span className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Bonus</span>
+                      <input
+                        type="number"
+                        value={giveAllAmount}
+                        min={1}
+                        onChange={e => setGiveAllAmount(parseInt(e.target.value) || 0)}
+                        className="w-16 bg-transparent text-white text-center text-sm font-black outline-none"
+                      />
+                      <span className="text-xs text-neutral-500 font-bold">tokens</span>
+                    </div>
+                    <button
+                      onClick={giveAllTokens}
+                      disabled={givingAll}
+                      className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20"
+                    >
+                      {givingAll ? 'Giving...' : `Give All (${users.length})`}
+                    </button>
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                      <input 
+                        value={userSearch}
+                        onChange={e => setUserSearch(e.target.value)}
+                        placeholder="Search users..."
+                        className="pl-12 pr-6 py-3 bg-neutral-900 border border-neutral-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition-all w-64"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -557,7 +634,7 @@ export const AdminPanel: React.FC = () => {
                 )}
               </motion.div>
 
-            ) : (
+            ) : activeTab === 'matches' ? (
               <motion.div key="matches" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-5xl mx-auto space-y-6">
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-4xl font-black tracking-tighter uppercase">Live Matches</h2>
@@ -642,7 +719,61 @@ export const AdminPanel: React.FC = () => {
                   </div>
                 )}
               </motion.div>
-            )}
+
+            ) : activeTab === 'announcements' ? (
+              <motion.div key="announcements" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="max-w-3xl mx-auto space-y-6">
+                <h2 className="text-4xl font-black tracking-tighter uppercase mb-8">Announcements</h2>
+                <div className="bg-neutral-900/50 border border-neutral-800 rounded-[32px] p-8 space-y-4">
+                  <h3 className="text-lg font-black uppercase tracking-widest text-emerald-400">Post New Announcement</h3>
+                  <input
+                    value={newAnnTitle}
+                    onChange={e => setNewAnnTitle(e.target.value)}
+                    placeholder="Title..."
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-emerald-500 transition-all"
+                  />
+                  <textarea
+                    value={newAnnBody}
+                    onChange={e => setNewAnnBody(e.target.value)}
+                    placeholder="Announcement body..."
+                    rows={4}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-emerald-500 transition-all resize-none"
+                  />
+                  <button
+                    onClick={postAnnouncement}
+                    disabled={annLoading || !newAnnTitle.trim() || !newAnnBody.trim()}
+                    className="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {annLoading ? 'Posting...' : 'Post Announcement'}
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {announcements.length === 0 && (
+                    <div className="py-20 text-center">
+                      <MessageSquare className="w-16 h-16 text-neutral-900 mx-auto mb-6" />
+                      <p className="text-neutral-700 font-black uppercase tracking-[0.4em]">No Announcements Yet</p>
+                    </div>
+                  )}
+                  {announcements.map((ann: any) => (
+                    <div key={ann.id} className="bg-neutral-900/50 border border-neutral-900 rounded-[28px] p-6 hover:border-emerald-500/20 transition-all">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="text-white font-black text-lg mb-1">{ann.title}</p>
+                          <p className="text-neutral-400 text-sm leading-relaxed whitespace-pre-wrap">{ann.body}</p>
+                          <p className="text-neutral-600 text-[10px] font-mono mt-3 uppercase tracking-widest">
+                            {ann.createdAt?.toDate?.()?.toLocaleString() || ''}
+                          </p>
+                        </div>
+                        <button onClick={() => deleteAnnouncement(ann.id)}
+                          className="shrink-0 p-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-2xl transition-all">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ) : null}
           </AnimatePresence>
         </div>
       </main>

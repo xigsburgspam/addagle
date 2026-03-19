@@ -7,7 +7,9 @@ import { motion, AnimatePresence } from 'motion/react';
 
 import { BANNED_WORDS, containsBanned } from '../constants';
 
-const CHAR_LIMIT      = 2599;
+const MSG_CHAR_LIMIT  = 70;   // per message
+const CHAT_CHAR_TOTAL = 2599; // total per session
+const CHAR_LIMIT      = MSG_CHAR_LIMIT; // alias for existing logic
 const SWIPE_THRESHOLD = 58;
 const REACTIONS       = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
@@ -50,6 +52,7 @@ export const Chat: React.FC<ChatProps> = ({
   const [swipes,        setSwipes]        = useState<Record<string, Swipe>>({});
   const [newReactionId, setNewReactionId] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [totalCharsUsed, setTotalCharsUsed] = useState(0);
 
   const scrollRef    = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLTextAreaElement>(null);
@@ -126,7 +129,9 @@ export const Chat: React.FC<ChatProps> = ({
 
   const send = useCallback(() => {
     const t = inputText.trim();
-    if (!t || !socket || t.length > CHAR_LIMIT) return;
+    if (!t || !socket) return;
+    if (t.length > MSG_CHAR_LIMIT) return;
+    if (totalCharsUsed + t.length > CHAT_CHAR_TOTAL) return;
     if (containsBanned(t)) {
       setInputText('');
       return;
@@ -145,6 +150,7 @@ export const Chat: React.FC<ChatProps> = ({
     socket.emit('send-chat-message', { roomId, message: msg });
     socket.emit('message-delivered', { roomId, messageId: msg.id });
     setMessages(p => [...p, msg]);
+    setTotalCharsUsed(prev => prev + t.length);
     setInputText('');
     setReplyingTo(null);
     isAtBottom.current = true;
@@ -227,7 +233,7 @@ export const Chat: React.FC<ChatProps> = ({
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (e.target.value.length > CHAR_LIMIT) return;
+    if (e.target.value.length > MSG_CHAR_LIMIT) return;
     setInputText(e.target.value);
     e.target.style.height = 'auto';
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
@@ -243,7 +249,8 @@ export const Chat: React.FC<ChatProps> = ({
                         <CheckCheck className="w-3 h-3 text-emerald-300" />
   );
 
-  const charsLeft = CHAR_LIMIT - inputText.length;
+  const msgCharsLeft = MSG_CHAR_LIMIT - inputText.length;
+  const chatCharsLeft = CHAT_CHAR_TOTAL - totalCharsUsed;
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden select-none"
@@ -395,7 +402,7 @@ export const Chat: React.FC<ChatProps> = ({
                       </div>
                     )}
 
-                    <p className="px-3 pt-1.5 text-[13.5px] leading-[1.5] break-words relative z-10">
+                    <p className="px-3 pt-1.5 text-[13.5px] leading-[1.5] break-words break-all relative z-10" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
                       {msg.text}
                     </p>
 
@@ -594,10 +601,10 @@ export const Chat: React.FC<ChatProps> = ({
               className="flex-1 bg-transparent text-[13.5px] text-white leading-relaxed
                          focus:outline-none placeholder:text-neutral-600 resize-none overflow-y-auto"
             />
-            {charsLeft <= 30 && (
+            {msgCharsLeft <= 20 && (
               <span className={`text-[9px] font-mono self-end mb-0.5 shrink-0
-                               ${charsLeft <= 10 ? 'text-red-400' : 'text-yellow-500/60'}`}>
-                {charsLeft}
+                               ${msgCharsLeft <= 5 ? 'text-red-400' : 'text-yellow-500/60'}`}>
+                {msgCharsLeft}
               </span>
             )}
           </div>

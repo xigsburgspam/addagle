@@ -1063,7 +1063,12 @@ export const VideoChat: React.FC<VideoChatProps> = ({ onExit, mode, userName }) 
           <div className="h-full w-full flex flex-col">
             <div className="p-4 sm:p-6 border-b border-neutral-900 flex items-center gap-3 bg-neutral-950/50">
               <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 ">{t.sessionLog}</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">{t.sessionLog}</span>
+              {mode === 'text' && (
+                <span className="ml-auto mr-0 text-[9px] font-mono text-neutral-600">
+                  Chat: <span className="text-neutral-400">2599</span> chars/session
+                </span>
+              )}
 
               <div className="ml-auto flex items-center gap-4">
                 {mode === 'text' && (
