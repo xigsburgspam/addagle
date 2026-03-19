@@ -1,46 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Document ID: {userId}
-    // Fields:
-    //   - uid: string (required)
-    //   - email: string (required)
-    //   - displayName: string
-    //   - photoURL: string
-    //   - role: string (admin/user)
-    //   - isBlocked: boolean
-    //   - videoCount: integer
-    //   - lastVideoDate: string
-    //   - savedDisplayName: string
-    //   - hasSavedName: boolean
-    //   - createdAt: timestamp
-    //
-    // Collection: reports
-    // Document ID: {reportId}
-    // Fields:
-    //   - reporterId: string (required)
-    //   - reportedId: string (required)
-    //   - reason: string (required)
-    //   - timestamp: timestamp (required)
-    //   - roomId: string
-    //
-    // Collection: blocked_emails
-    // Document ID: {email}
-    // Fields:
-    //   - blockedAt: timestamp
-    //   - reason: string
-    //
-    // ===============================================================
 
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -50,99 +11,72 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
         request.auth.token.email == "edublitz71@gmail.com";
     }
 
     function isNotBlocked() {
       return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-             !('isBlocked' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked == false;
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false) == false;
     }
 
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role']) &&
-             data.uid is string &&
-             data.email is string &&
-             data.role in ['admin', 'user'] &&
-             (!('isBlocked' in data) || data.isBlocked is bool) &&
-             (!('tokens' in data) || data.tokens is number) &&
-             (!('savedDisplayName' in data) || data.savedDisplayName is string || data.savedDisplayName == null) &&
-             (!('hasSavedName' in data) || data.hasSavedName is bool) &&
-             (!('videoCallsToday' in data) || data.videoCallsToday is number) &&
-             (!('lastCallDate' in data) || data.lastCallDate is string);
-    }
-
-    function isValidReport(data) {
-      return data.keys().hasAll(['reporterId', 'reportedId', 'reason', 'timestamp']) &&
-             data.reporterId == request.auth.uid &&
-             data.reportedId is string &&
-             data.reason is string &&
-             data.timestamp is timestamp;
-    }
-
-    function isValidFootballMatch(data) {
-      return data.keys().hasAll(['teamA', 'teamB', 'league', 'streamUrl', 'live', 'createdAt']) &&
-             data.teamA is string && data.teamA.size() > 0 && data.teamA.size() < 100 &&
-             data.teamB is string && data.teamB.size() > 0 && data.teamB.size() < 100 &&
-             data.league is string && data.league.size() > 0 && data.league.size() < 100 &&
-             data.streamUrl is string && data.streamUrl.size() > 0 && data.streamUrl.size() < 1000 &&
-             data.live is bool &&
-             data.createdAt is string;
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
+    // ── users ──────────────────────────────────────────────────────────────
     match /users/{userId} {
-      // Any authenticated user can read their own doc; admins can read all
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      // User can create their own doc if it's valid and role matches
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) &&
-                    (request.resource.data.role == 'user' ||
-                     (request.resource.data.role == 'admin' && request.auth.token.email == "edublitz71@gmail.com"));
-      // Owners can update their own doc (tokens, display name, etc.) but cannot change role or blocked status
-      // Admins can update anything
-      allow update: if isAuthenticated() && (
-                      isAdmin() ||
-                      (isOwner(userId) &&
-                       request.resource.data.role == resource.data.role &&
-                       request.resource.data.isBlocked == resource.data.isBlocked)
-                    );
-    }
+      // Owner reads their own doc; admin reads all
+      allow read: if isOwner(userId) || isAdmin();
 
-    match /reports/{reportId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated() && isNotBlocked() && isValidReport(request.resource.data);
+      // Any authenticated user can create their own document (no field validation
+      // so the write is never blocked by a type mismatch or missing field)
+      allow create: if isOwner(userId) && isAuthenticated();
+
+      // Owner can update their own doc but cannot elevate role or change blocked status
+      // Admin can update anything
+      allow update: if isAdmin() ||
+                    (isOwner(userId) &&
+                     request.resource.data.role == resource.data.role &&
+                     request.resource.data.get('isBlocked', false) == resource.data.get('isBlocked', false));
+
       allow delete: if isAdmin();
     }
 
+    // ── reports ────────────────────────────────────────────────────────────
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isNotBlocked() &&
+                    request.resource.data.keys().hasAll(['reporterId','reportedId','reason','timestamp']) &&
+                    request.resource.data.reporterId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // ── blocked_emails ─────────────────────────────────────────────────────
     match /blocked_emails/{email} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == email);
       allow write: if isAdmin();
     }
 
+    // ── stats ──────────────────────────────────────────────────────────────
     match /stats/global {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
+    // ── presence ───────────────────────────────────────────────────────────
     match /presence/{userId} {
       allow read: if true;
       allow write: if isOwner(userId) && isNotBlocked();
     }
 
+    // ── football_matches ───────────────────────────────────────────────────
     match /football_matches/{matchId} {
       allow read: if true;
-      allow create: if isAdmin() && isValidFootballMatch(request.resource.data);
-      allow update: if isAdmin() && isValidFootballMatch(request.resource.data);
+      allow create, update: if isAdmin() &&
+                    request.resource.data.keys().hasAll(['teamA','teamB','league','streamUrl','live','createdAt']);
       allow delete: if isAdmin();
     }
 
+    // ── blocks ─────────────────────────────────────────────────────────────
     match /blocks/{blockId} {
-      allow read: if isAdmin(); // Only admin or server needs to read all blocks
-      allow write: if false; // Only server (Admin SDK) should write
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }

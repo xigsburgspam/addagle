@@ -58,39 +58,60 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (firebaseUser) {
         const userDocRef = doc(db, 'users', firebaseUser.uid);
 
-        // ── Step 1: ensure the user document exists before subscribing ──
-        // We do a one-time read first so we never hit the race where
-        // onSnapshot fires on a missing doc while isAdmin() in rules
-        // tries to get() the same missing doc and throws.
-        try {
-          const snap = await getDoc(userDocRef);
-          if (!snap.exists()) {
-            const newUser: UserData = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              displayName: firebaseUser.displayName || '',
-              photoURL: firebaseUser.photoURL || '',
-              role: firebaseUser.email === 'edublitz71@gmail.com' ? 'admin' : 'user',
-              isBlocked: false,
-              tokens: 100,
-            };
-            await setDoc(userDocRef, newUser);
-            // Update account counter (best-effort)
-            updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
-              .catch(e => console.error('Stats update failed:', e));
+        const newUserData: UserData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          displayName: firebaseUser.displayName || '',
+          photoURL: firebaseUser.photoURL || '',
+          role: firebaseUser.email === 'edublitz71@gmail.com' ? 'admin' : 'user',
+          isBlocked: false,
+          tokens: 100,
+        };
+
+        // ── Step 1: create doc if it doesn't exist, with retries ──
+        const ensureUserDoc = async (): Promise<boolean> => {
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const snap = await getDoc(userDocRef);
+              if (snap.exists()) return true; // already exists
+              // Doc missing — create it
+              await setDoc(userDocRef, newUserData);
+              console.log('User doc created successfully');
+              updateDoc(doc(db, 'stats', 'global'), { totalAccounts: increment(1) })
+                .catch(() => {});
+              return true;
+            } catch (e: any) {
+              console.error(`User doc init attempt ${attempt} failed:`, e?.code, e?.message);
+              if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+            }
           }
-        } catch (e) {
-          console.error('User doc init failed:', e);
+          return false;
+        };
+
+        const created = await ensureUserDoc();
+
+        if (!created) {
+          // Rules are blocking us — set local userData so the app doesn't hang,
+          // but the doc won't be in Firestore until rules are fixed.
+          console.error('CRITICAL: Cannot write to Firestore. Check security rules for database:', db.app.options);
+          setUserData(newUserData);
+          setLoading(false);
+          return;
         }
 
-        // ── Step 2: live listener — doc is guaranteed to exist now ──
+        // ── Step 2: live listener — doc now guaranteed to exist ──
         unsubDoc = onSnapshot(userDocRef, async (docSnap) => {
           if (!docSnap.exists()) {
-            // Shouldn't happen, but handle gracefully
             setLoading(false);
             return;
           }
           let currentData = docSnap.data() as UserData;
+
+          // Ensure tokens field exists for old accounts created before the token system
+          if (currentData.tokens === undefined) {
+            updateDoc(userDocRef, { tokens: 100 }).catch(() => {});
+            currentData = { ...currentData, tokens: 100 };
+          }
 
           // Check if email is blocked
           if (firebaseUser.email) {
@@ -107,7 +128,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUserData(currentData);
           setLoading(false);
         }, (error) => {
-          console.error('Firestore snapshot error:', error);
+          console.error('Firestore snapshot error:', error?.code, error?.message);
           setLoading(false);
         });
       } else {
