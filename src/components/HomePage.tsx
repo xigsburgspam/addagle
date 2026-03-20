@@ -740,7 +740,7 @@ export const HomePage: React.FC<{
                       <p className="text-emerald-400 font-black text-sm uppercase tracking-widest">Your Invite Link</p>
                     </div>
                     <p className="text-neutral-400 text-xs mb-3 leading-relaxed">
-                      Share your invite link. When someone creates an account using your link, <span className="text-emerald-400 font-bold">both of you get 25 bonus tokens!</span>
+                      Share your invite link. When someone creates an account using your link, <span className="text-emerald-400 font-bold">both of you get 25 bonus tokens!</span><i> After the admin verifies</i>
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-neutral-900 rounded-xl px-3 py-2 text-xs font-mono text-neutral-300 truncate border border-neutral-800">

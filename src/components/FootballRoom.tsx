@@ -183,8 +183,10 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
             ref={iframeRef}
             src={match.streamUrl}
             className="w-full h-full border-0"
-            allow="autoplay; fullscreen; encrypted-media"
+            frameBorder="0"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
+            {...{ webkitallowfullscreen: "true", mozallowfullscreen: "true", oallowfullscreen: "true", msallowfullscreen: "true", allowautoplay: "true", "allow-scripts": "" } as any}
             title="Match Stream"
           />
           {/* Fullscreen button overlay */}
