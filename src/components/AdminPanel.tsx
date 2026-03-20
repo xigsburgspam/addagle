@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
-import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc, getDocs, arrayRemove, getDoc } from '../firebase';
+import { db, collection, onSnapshot, query, doc, updateDoc, setDoc, deleteDoc, Timestamp, addDoc, getDocs, arrayRemove, getDoc, increment } from '../firebase';
 import { Shield, UserX, MessageSquare, Terminal, ShieldAlert, Globe, Lock, Video, Tv2, Plus, Trash2, Wifi, WifiOff, Users, Search, RotateCcw, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
@@ -69,6 +69,8 @@ export const AdminPanel: React.FC = () => {
   const [giftingId,     setGiftingId]     = useState<string | null>(null);
   const [packages,      setPackages]      = useState<any[]>([]);
   const [blockStats,    setBlockStats]    = useState({ totalBlocked: 0, totalTempBlocked: 0 });
+  const [tempBlockHours,  setTempBlockHours]  = useState(6);
+  const [tempBlockMins,   setTempBlockMins]   = useState(0);
   const [newPkg,        setNewPkg]        = useState({ label: '', tokens: '', price: '', waLink: '', bestValue: false });
   const [pkgLoading,    setPkgLoading]    = useState(false);
   const [giveAllAmount, setGiveAllAmount] = useState<number>(100);
@@ -214,15 +216,18 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const tempBlockUser = async (userId: string, email?: string) => {
-    if (!confirm('Temporarily block this user for 6 hours?')) return;
-    const unblockAt = Date.now() + 6 * 60 * 60 * 1000; // 6 hours from now
+  const tempBlockUser = async (userId: string, durationMs: number) => {
+    const totalMins = Math.round(durationMs / 60000);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    const label = h > 0 && m > 0 ? `${h}h ${m}m` : h > 0 ? `${h}h` : `${m}m`;
+    if (!confirm(`Temporarily block this user for ${label}?`)) return;
+    const unblockAt = Date.now() + durationMs;
     try {
       await updateDoc(doc(db, 'users', userId), {
         isBlocked: true,
         tempBlockedUntil: unblockAt,
       });
-      // Increment temp block counter
       await updateDoc(doc(db, 'stats', 'global'), { totalTempBlocked: increment(1) });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${userId}`);
@@ -303,11 +308,12 @@ export const AdminPanel: React.FC = () => {
     if (!amount || amount <= 0) return;
     setGiftingId(referral.id);
     try {
-      // Gift invitor
+      // Gift invitor + increment their totalReferrals count
       const invitorSnap = await getDoc(doc(db, 'users', referral.invitorUid));
       if (invitorSnap.exists()) {
         await updateDoc(doc(db, 'users', referral.invitorUid), {
-          tokens: (invitorSnap.data().tokens ?? 100) + amount
+          tokens: (invitorSnap.data().tokens ?? 100) + amount,
+          totalReferrals: increment(1)
         });
       }
       // Gift invited
@@ -451,18 +457,7 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900 rounded-xl border border-neutral-800">
-            <Globe className="w-3 h-3 text-emerald-500" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Global Status: </span>
-            <span className="text-[10px] font-mono text-emerald-500 uppercase">Operational</span>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900 rounded-xl border border-neutral-800">
-            <Lock className="w-3 h-3 text-emerald-500" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Encryption: </span>
-            <span className="text-[10px] font-mono text-emerald-500 uppercase">AES-256</span>
-          </div>
-        </div>
+
       </header>
 
       <main className="flex-1 flex overflow-hidden">
@@ -564,17 +559,7 @@ export const AdminPanel: React.FC = () => {
             Start Encounter
           </button>
 
-          <div className="mt-auto p-6 bg-neutral-900/50 rounded-3xl border border-neutral-900">
-            <div className="flex items-center gap-3 mb-4">
-              <Terminal className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">System Log</span>
-            </div>
-            <div className="space-y-2">
-              <p className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">07:56:27 - Protocol Initialized</p>
-              <p className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">07:56:30 - Auth Handshake OK</p>
-              <p className="text-[8px] font-mono text-emerald-500/50 uppercase tracking-widest animate-pulse">07:56:35 - Monitoring Active</p>
-            </div>
-          </div>
+
         </aside>
 
         <div className="flex-1 overflow-y-auto p-12 bg-neutral-950 relative">
@@ -722,11 +707,18 @@ export const AdminPanel: React.FC = () => {
                                   Blocked
                                 </span>
                               )}
-                              {user.isBlocked && user.tempBlockedUntil && (
-                                <span className="text-[8px] font-black px-2 py-0.5 rounded uppercase bg-amber-500 text-black">
-                                  Temp {Math.max(0, Math.ceil((user.tempBlockedUntil - Date.now()) / 60000))}m left
-                                </span>
-                              )}
+                              {user.isBlocked && user.tempBlockedUntil && (() => {
+                                const secsLeft = Math.max(0, Math.floor((user.tempBlockedUntil - Date.now()) / 1000));
+                                const hh = Math.floor(secsLeft / 3600);
+                                const mm = Math.floor((secsLeft % 3600) / 60);
+                                const ss = secsLeft % 60;
+                                const fmt = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+                                return (
+                                  <span className="text-[8px] font-black px-2 py-0.5 rounded uppercase bg-amber-500 text-black font-mono">
+                                    ⏱ {fmt} left
+                                  </span>
+                                );
+                              })()}
                             </div>
                             <p className="text-[10px] font-mono text-neutral-500 mt-1">{user.email} • {user.uid}</p>
                             <div className="flex items-center gap-1.5 mt-1">
@@ -773,11 +765,36 @@ export const AdminPanel: React.FC = () => {
                                   className="p-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
                                   <UserX className="w-4 h-4" /> Block
                                 </button>
-                                <button onClick={() => tempBlockUser(user.id, user.email)}
-                                  title="Temporary block (6 hours)"
-                                  className="p-3 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-black rounded-xl transition-all flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest">
-                                  <Shield className="w-4 h-4" /> 6h
-                                </button>
+                                {/* Custom temp block duration */}
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number" min={0} max={99}
+                                    value={tempBlockHours}
+                                    onChange={e => setTempBlockHours(Math.max(0, parseInt(e.target.value) || 0))}
+                                    className="w-10 text-center bg-neutral-950 border border-neutral-700 rounded-lg text-xs text-white font-black outline-none focus:border-amber-500 py-1"
+                                    title="Hours"
+                                  />
+                                  <span className="text-neutral-600 text-[10px] font-bold">h</span>
+                                  <input
+                                    type="number" min={0} max={59}
+                                    value={tempBlockMins}
+                                    onChange={e => setTempBlockMins(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+                                    className="w-10 text-center bg-neutral-950 border border-neutral-700 rounded-lg text-xs text-white font-black outline-none focus:border-amber-500 py-1"
+                                    title="Minutes"
+                                  />
+                                  <span className="text-neutral-600 text-[10px] font-bold">m</span>
+                                  <button
+                                    onClick={() => {
+                                      const ms = (tempBlockHours * 60 + tempBlockMins) * 60 * 1000;
+                                      if (ms <= 0) return alert('Set a duration greater than 0');
+                                      tempBlockUser(user.id, ms);
+                                    }}
+                                    className="p-2 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-black rounded-xl transition-all"
+                                    title="Apply temp block"
+                                  >
+                                    <Shield className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <button onClick={() => unblockEmail(user.email, user.id)}
