@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Tv2, Trophy, Loader2, ArrowRight, User, AlertCircle, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io } from 'socket.io-client';
-import { collection, query, where, onSnapshot, db } from '../firebase';
+import { collection, query, onSnapshot, db } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
 import { BANNED_WORDS, containsBanned } from '../constants';
@@ -38,11 +38,16 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter, userName }) =
   const [step,      setStep]      = useState<'list' | 'name'>('list');
 
   useEffect(() => {
-    const qMatches = query(collection(db, 'football_matches'), where('live', '==', true));
+    const qMatches = query(collection(db, 'football_matches'));
     const unsubscribe = onSnapshot(qMatches, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
-      data.sort((a, b) => (b.createdAt?.localeCompare(a.createdAt || '') || 0));
-      setMatches(data);
+      const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Match));
+      // Sort: live first, then upcoming
+      all.sort((a: any, b: any) => {
+        if (a.status !== 'upcoming' && b.status === 'upcoming') return -1;
+        if (a.status === 'upcoming' && b.status !== 'upcoming') return 1;
+        return 0;
+      });
+      setMatches(all);
       setLoading(false);
     }, (error) => {
       setLoading(false);

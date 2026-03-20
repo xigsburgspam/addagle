@@ -390,9 +390,12 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  const toggleLive = async (id: string, live: boolean) => {
+  const setMatchStatus = async (id: string, newStatus: 'live' | 'upcoming') => {
     try {
-      await updateDoc(doc(db, 'football_matches', id), { live: !live });
+      await updateDoc(doc(db, 'football_matches', id), {
+        status: newStatus,
+        live: newStatus === 'live',
+      });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `football_matches/${id}`);
     }
@@ -973,9 +976,9 @@ export const AdminPanel: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={`w-1.5 h-1.5 rounded-full ${match.live ? 'bg-red-500 animate-pulse' : 'bg-neutral-600'}`} />
-                          <span className={`text-[9px] font-bold uppercase tracking-widest ${match.live ? 'text-red-400' : 'text-neutral-600'}`}>
-                            {match.live ? 'LIVE' : 'OFFLINE'}
+                          <span className={`w-1.5 h-1.5 rounded-full ${match.status === 'upcoming' ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
+                          <span className={`text-[9px] font-bold uppercase tracking-widest ${match.status === 'upcoming' ? 'text-amber-400' : 'text-red-400'}`}>
+                            {match.status === 'upcoming' ? 'UPCOMING' : 'LIVE'}
                           </span>
                           <span className="text-[9px] text-neutral-600 uppercase tracking-widest">· {match.league}</span>
                         </div>
@@ -1005,11 +1008,30 @@ export const AdminPanel: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => toggleLive(match.id, match.live)}
-                          className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${match.live ? 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'}`}>
-                          {match.live ? <WifiOff className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
-                          {match.live ? 'Set Offline' : 'Set Live'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setMatchStatus(match.id, 'live')}
+                            disabled={match.status !== 'upcoming' && match.live}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                            style={{
+                              background: match.status !== 'upcoming' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)',
+                              color: match.status !== 'upcoming' ? '#f87171' : '#6b7280',
+                              border: match.status !== 'upcoming' ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                            }}>
+                            <Wifi className="w-3.5 h-3.5" /> Set Live
+                          </button>
+                          <button
+                            onClick={() => setMatchStatus(match.id, 'upcoming')}
+                            disabled={match.status === 'upcoming'}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                            style={{
+                              background: match.status === 'upcoming' ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.05)',
+                              color: match.status === 'upcoming' ? '#fbbf24' : '#6b7280',
+                              border: match.status === 'upcoming' ? '1px solid rgba(245,158,11,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                            }}>
+                            <WifiOff className="w-3.5 h-3.5" /> Set Upcoming
+                          </button>
+                        </div>
                         <button onClick={() => deleteMatch(match.id)}
                           className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-red-600/20">
                           <Trash2 className="w-4 h-4" /> Delete
