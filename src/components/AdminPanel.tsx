@@ -53,6 +53,9 @@ interface FootballMatch {
   live: boolean;
   createdAt?: string;
   streamMode?: 'popup' | 'iframe';
+  matchDate?: string;
+  matchTime?: string;
+  status?: 'live' | 'upcoming';
 }
 
 export const AdminPanel: React.FC = () => {
@@ -82,7 +85,7 @@ export const AdminPanel: React.FC = () => {
   const [newAnnBody,    setNewAnnBody]    = useState('');
   const [annLoading,    setAnnLoading]    = useState(false);
   const [matches,      setMatches]      = useState<FootballMatch[]>([]);
-  const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '', streamMode: 'popup' as 'popup' | 'iframe' });
+  const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '', streamMode: 'popup' as 'popup' | 'iframe', matchDate: '', matchTime: '', status: 'live' as 'live' | 'upcoming' });
   const [addingMatch,  setAddingMatch]  = useState(false);
   const [matchMsg,     setMatchMsg]     = useState('');
   const [userSearch,     setUserSearch]     = useState('');
@@ -362,10 +365,13 @@ export const AdminPanel: React.FC = () => {
       await addDoc(collection(db, 'football_matches'), {
         teamA, teamB, league, streamUrl,
         streamMode: newMatch.streamMode,
-        live: true,
+        matchDate: newMatch.matchDate,
+        matchTime: newMatch.matchTime,
+        status: newMatch.status,
+        live: newMatch.status === 'live',
         createdAt: new Date().toISOString()
       });
-      setNewMatch({ teamA: '', teamB: '', league: '', streamUrl: '', streamMode: 'popup' });
+      setNewMatch({ teamA: '', teamB: '', league: '', streamUrl: '', streamMode: 'popup', matchDate: '', matchTime: '', status: 'live' });
       setMatchMsg('Match added!');
       setTimeout(() => setMatchMsg(''), 3000);
     } catch (e) {
@@ -907,6 +913,36 @@ export const AdminPanel: React.FC = () => {
                     </div>
                   </div>
                   {/* Stream mode toggle */}
+                  {/* Date, Time, Status row */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">Match Date</label>
+                      <input type="date" value={newMatch.matchDate}
+                        onChange={e => setNewMatch(p => ({ ...p, matchDate: e.target.value }))}
+                        className="w-full px-3 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">Kick-off Time</label>
+                      <input type="time" value={newMatch.matchTime}
+                        onChange={e => setNewMatch(p => ({ ...p, matchTime: e.target.value }))}
+                        className="w-full px-3 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-neutral-600 mb-1.5 block">Status</label>
+                      <div className="flex gap-2 h-[46px] items-center">
+                        {(['live', 'upcoming'] as const).map(s => (
+                          <button key={s} onClick={() => setNewMatch(p => ({ ...p, status: s }))}
+                            className="flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                            style={{
+                              background: newMatch.status === s ? (s === 'live' ? '#ef4444' : '#f59e0b') : 'rgba(255,255,255,0.05)',
+                              color: newMatch.status === s ? '#fff' : '#6b7280'
+                            }}>
+                            {s === 'live' ? '🔴 Live' : '🕐 Upcoming'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-3 mb-4">
                     <span className="text-[9px] font-black uppercase tracking-widest text-neutral-600">Stream Mode:</span>
                     {(['popup', 'iframe'] as const).map(mode => (
@@ -945,10 +981,28 @@ export const AdminPanel: React.FC = () => {
                         </div>
                         <p className="text-xl font-black text-white">{match.teamA} vs {match.teamB}</p>
                         <p className="text-[10px] font-mono text-neutral-600 mt-1 truncate max-w-sm">{match.streamUrl}</p>
-                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded mt-1 inline-block"
-                          style={{ background: match.streamMode === 'iframe' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.12)', color: match.streamMode === 'iframe' ? '#818cf8' : '#34d399' }}>
-                          {match.streamMode === 'iframe' ? '📺 Iframe' : '🔗 Pop Out'}
-                        </span>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                            style={{ background: match.streamMode === 'iframe' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.12)', color: match.streamMode === 'iframe' ? '#818cf8' : '#34d399' }}>
+                            {match.streamMode === 'iframe' ? '📺 Iframe' : '🔗 Pop Out'}
+                          </span>
+                          {match.status === 'upcoming' ? (
+                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                              style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                              🕐 Upcoming
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+                              🔴 Live
+                            </span>
+                          )}
+                          {(match.matchDate || match.matchTime) && (
+                            <span className="text-[9px] font-mono text-neutral-500">
+                              {match.matchDate} {match.matchTime}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <button onClick={() => toggleLive(match.id, match.live)}

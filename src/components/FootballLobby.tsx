@@ -15,6 +15,10 @@ interface Match {
   streamUrl: string;
   live: boolean;
   createdAt?: string;
+  matchDate?: string;
+  matchTime?: string;
+  status?: 'live' | 'upcoming';
+  streamMode?: 'popup' | 'iframe';
 }
 
 interface Props {
@@ -188,10 +192,23 @@ export const FootballLobby: React.FC<Props> = ({ onClose, onEnter, userName }) =
                                    hover:border-emerald-500/30 hover:bg-white/[0.07]
                                    transition-all">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                            <span className="text-[9px] font-bold text-red-400 uppercase tracking-widest">LIVE</span>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            {match.status === 'upcoming' ? (
+                              <>
+                                <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest">🕐 Upcoming</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                                <span className="text-[9px] font-bold text-red-400 uppercase tracking-widest">LIVE</span>
+                              </>
+                            )}
                             <span className="text-[9px] text-neutral-600 uppercase tracking-widest">· {match.league}</span>
+                            {(match.matchDate || match.matchTime) && (
+                              <span className="text-[9px] font-mono text-neutral-600">
+                                {match.matchDate} {match.matchTime && match.matchTime}
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm font-black text-white truncate">
                             {match.teamA} <span className="text-neutral-500">vs</span> {match.teamB}

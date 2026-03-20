@@ -510,63 +510,67 @@ export const HomePage: React.FC<{
         </div>
       </main>
 
-      {/* Features Bento Grid */}
-      <section className="relative z-10 border-t border-neutral-900 bg-neutral-950 py-24">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-20">
-            <h2 className="text-4xl font-black tracking-tighter uppercase mb-4">{t.protocol}</h2>
-            <p className="text-neutral-500 font-medium">{t.protocolDesc}</p>
-          </div>
-
-          <div className="grid md:grid-cols-12 gap-6">
-            <div className="md:col-span-8 p-14 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
-              <Shield className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.activeModeration}</h3>
-              <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">{t.activeModerationDesc}</p>
-            </div>
-
-            <div className="md:col-span-4 p-12 rounded-[40px] bg-gradient-to-br from-emerald-500 to-emerald-600 text-black group overflow-hidden relative">
-              <Zap className="w-12 h-12 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter">{t.instantMatch}</h3>
-              <p className="text-black/70 text-lg leading-relaxed font-bold">{t.instantMatchDesc}</p>
-              <div className="absolute -bottom-10 -right-10 opacity-10">
-                <Zap className="w-40 h-40" />
+      {/* Features — compact glassy pills */}
+      <section className="relative z-10 border-t bg-neutral-950 py-16"
+               style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="text-center text-[10px] font-black uppercase tracking-[0.3em] text-neutral-600 mb-8">Why Gupto</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { icon: <Shield className="w-5 h-5" />, label: 'Safe & Moderated',    sub: 'Zero tolerance policy' },
+              { icon: <Zap className="w-5 h-5" />,    label: 'Instant Match',        sub: 'Connect in seconds'    },
+              { icon: <Lock className="w-5 h-5" />,   label: 'Zero History',         sub: 'Chats are ephemeral'   },
+              { icon: <GhostIcon className="w-5 h-5" />, label: 'Stay Anonymous',    sub: 'No identity exposed'   },
+              { icon: <Video className="w-5 h-5" />,  label: 'Video & Text',         sub: 'Two chat modes'        },
+              { icon: <Tv2 className="w-5 h-5" />,    label: 'Live Football',        sub: 'Watch with strangers'  },
+              { icon: <Users className="w-5 h-5" />,  label: 'Custom Rooms',         sub: 'Your space, your rules'},
+              { icon: <MessageCircle className="w-5 h-5" />, label: 'Token System',  sub: 'Fair access credits'   },
+            ].map(({ icon, label, sub }) => (
+              <div key={label}
+                className="group flex flex-col items-start gap-2.5 p-4 rounded-2xl transition-all duration-300 cursor-default"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  backdropFilter: 'blur(12px)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)'
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(16,185,129,0.3)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(16,185,129,0.05)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)'; }}
+              >
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center text-emerald-400 shrink-0"
+                     style={{ background: 'rgba(16,185,129,0.1)' }}>
+                  {icon}
+                </div>
+                <div>
+                  <p className="text-white font-black text-xs leading-tight">{label}</p>
+                  <p className="text-neutral-500 text-[10px] mt-0.5 leading-tight">{sub}</p>
+                </div>
               </div>
-            </div>
-
-            <div className="md:col-span-4 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
-              <MessageSquare className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.zeroHistory}</h3>
-              <p className="text-neutral-400 leading-relaxed">{t.zeroHistoryDesc}</p>
-            </div>
-
-            <div className="md:col-span-8 p-14 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
-              <Ghost className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
-              <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.visualVerification}</h3>
-              <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">{t.visualVerificationDesc}</p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 py-8 border-t border-neutral-900 bg-neutral-950">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 flex items-center justify-center">
-              <GhostIcon className="w-9 h-9" />
-            </div>
-            <span className="text-xl font-black tracking-widest uppercase bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">{t.appName}</span>
+      <footer className="relative z-10 py-5 border-t bg-neutral-950" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <GhostIcon className="w-6 h-6" />
+            <span className="text-sm font-black tracking-widest uppercase bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">{t.appName}</span>
           </div>
-          <p className="text-neutral-600 text-xs font-bold uppercase tracking-[0.3em]">{t.copyright}</p>
-          <div className="flex gap-8 items-center">
-            <button onClick={() => setShowTermsPopup(true)} className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Terms</button>
-            <button onClick={() => setShowPrivacyPopup(true)} className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Privacy</button>
-            <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-neutral-600 hover:text-blue-400 transition-colors flex items-center gap-1.5">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-              </svg>
-              <span className="text-xs font-bold uppercase tracking-widest">Facebook</span>
+          <p className="text-neutral-700 text-[10px] font-bold uppercase tracking-[0.2em]">{t.copyright}</p>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowTermsPopup(true)} className="text-neutral-600 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest">Terms</button>
+            <button onClick={() => setShowPrivacyPopup(true)} className="text-neutral-600 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest">Privacy</button>
+            <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer"
+               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-blue-400 transition-all hover:text-white"
+               style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> FB Page
+            </a>
+            <a href="https://www.facebook.com/groups/1925825098065483" target="_blank" rel="noopener noreferrer"
+               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-blue-400 transition-all hover:text-white"
+               style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> FB Group
             </a>
           </div>
         </div>
@@ -736,7 +740,7 @@ export const HomePage: React.FC<{
                       <p className="text-emerald-400 font-black text-sm uppercase tracking-widest">Your Invite Link</p>
                     </div>
                     <p className="text-neutral-400 text-xs mb-3 leading-relaxed">
-                      Share your invite link. When someone creates an account using your link, <span className="text-emerald-400 font-bold">both of you get 25 bonus tokens!</span><i> After the admin verifies</i>
+                      Share your invite link. When someone creates an account using your link, <span className="text-emerald-400 font-bold">both of you get 25 bonus tokens!</span>
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-neutral-900 rounded-xl px-3 py-2 text-xs font-mono text-neutral-300 truncate border border-neutral-800">
