@@ -52,6 +52,7 @@ interface FootballMatch {
   streamUrl: string;
   live: boolean;
   createdAt?: string;
+  streamMode?: 'popup' | 'iframe';
 }
 
 export const AdminPanel: React.FC = () => {
@@ -77,7 +78,7 @@ export const AdminPanel: React.FC = () => {
   const [newAnnBody,    setNewAnnBody]    = useState('');
   const [annLoading,    setAnnLoading]    = useState(false);
   const [matches,      setMatches]      = useState<FootballMatch[]>([]);
-  const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '' });
+  const [newMatch,     setNewMatch]     = useState({ teamA: '', teamB: '', league: '', streamUrl: '', streamMode: 'popup' as 'popup' | 'iframe' });
   const [addingMatch,  setAddingMatch]  = useState(false);
   const [matchMsg,     setMatchMsg]     = useState('');
   const [userSearch,     setUserSearch]     = useState('');
@@ -352,10 +353,11 @@ export const AdminPanel: React.FC = () => {
     try {
       await addDoc(collection(db, 'football_matches'), {
         teamA, teamB, league, streamUrl,
+        streamMode: newMatch.streamMode,
         live: true,
         createdAt: new Date().toISOString()
       });
-      setNewMatch({ teamA: '', teamB: '', league: '', streamUrl: '' });
+      setNewMatch({ teamA: '', teamB: '', league: '', streamUrl: '', streamMode: 'popup' });
       setMatchMsg('Match added!');
       setTimeout(() => setMatchMsg(''), 3000);
     } catch (e) {
@@ -884,6 +886,21 @@ export const AdminPanel: React.FC = () => {
                         className="w-full px-4 py-3 rounded-2xl bg-neutral-950 border border-neutral-800 text-white text-sm focus:border-emerald-500/50 focus:outline-none transition-colors" />
                     </div>
                   </div>
+                  {/* Stream mode toggle */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-neutral-600">Stream Mode:</span>
+                    {(['popup', 'iframe'] as const).map(mode => (
+                      <button key={mode} onClick={() => setNewMatch(p => ({ ...p, streamMode: mode }))}
+                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                        style={{
+                          background: newMatch.streamMode === mode ? (mode === 'popup' ? '#10b981' : '#6366f1') : 'rgba(255,255,255,0.05)',
+                          color: newMatch.streamMode === mode ? '#000' : '#9ca3af'
+                        }}>
+                        {mode === 'popup' ? '🔗 Pop Out' : '📺 Iframe'}
+                      </button>
+                    ))}
+                    <span className="text-[9px] text-neutral-600">{newMatch.streamMode === 'iframe' ? 'Shows in-page with fullscreen' : 'Opens stream in new tab'}</span>
+                  </div>
                   {matchMsg && (
                     <p className={`text-xs mb-4 font-bold ${matchMsg.includes('!') ? 'text-emerald-400' : 'text-red-400'}`}>{matchMsg}</p>
                   )}
@@ -908,6 +925,10 @@ export const AdminPanel: React.FC = () => {
                         </div>
                         <p className="text-xl font-black text-white">{match.teamA} vs {match.teamB}</p>
                         <p className="text-[10px] font-mono text-neutral-600 mt-1 truncate max-w-sm">{match.streamUrl}</p>
+                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded mt-1 inline-block"
+                          style={{ background: match.streamMode === 'iframe' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.12)', color: match.streamMode === 'iframe' ? '#818cf8' : '#34d399' }}>
+                          {match.streamMode === 'iframe' ? '📺 Iframe' : '🔗 Pop Out'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-3">
                         <button onClick={() => toggleLive(match.id, match.live)}

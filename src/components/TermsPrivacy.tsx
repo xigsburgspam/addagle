@@ -1,3 +1,86 @@
+// Embeddable content used in both page and popup
+export const TermsPrivacyContent: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) => {
+  return (
+    <div className="space-y-3 pb-4">
+      {type === 'terms' ? (
+        <>
+          <Section title="1. Acceptance of Terms">
+            <p>By accessing or using Gupto ("the Service"), you confirm that you have read, understood, and agree to be bound by these Terms of Service. If you do not agree, you must discontinue use immediately. We reserve the right to update these Terms at any time.</p>
+          </Section>
+          <Section title="2. Eligibility — 18+ Only">
+            <p><strong className="text-white">You must be at least 18 years old</strong> to use Gupto. By using the Service, you represent that you are of legal age and that your use complies with all applicable laws.</p>
+          </Section>
+          <Section title="3. Prohibited Content & Conduct">
+            <p>The following are <strong className="text-red-400">strictly prohibited</strong> and result in an immediate permanent ban: sexually explicit content, nudity, violence, harassment, hate speech, solicitation, scamming, impersonation, sharing others' personal data, bots or automated tools, and any content that violates applicable law.</p>
+          </Section>
+          <Section title="4. Moderation & Enforcement">
+            <p>Gupto uses active moderation. Our team may monitor sessions, terminate calls, issue temporary (6-hour) or permanent bans, and act on user reports. All enforcement decisions are at Gupto's sole discretion.</p>
+          </Section>
+          <Section title="5. Token System">
+            <p>New accounts receive 100 free tokens. Video calls cost 7 tokens, custom chat rooms cost 4 tokens, and text chat topups cost 1 token per 50 characters. Tokens have no monetary value and are non-refundable.</p>
+          </Section>
+          <Section title="6. Referral Programme">
+            <p>Users may share invite links. Referral bonuses are reviewed and gifted manually by admins. Abuse of the referral system (fake accounts, self-referrals) results in disqualification and potential ban.</p>
+          </Section>
+          <Section title="7. Intellectual Property">
+            <p>All content on Gupto — design, code, logo, branding — is the exclusive property of Gupto. You may not copy or redistribute any part without explicit written permission.</p>
+          </Section>
+          <Section title="8. Disclaimers & Liability">
+            <p>Gupto is provided "as is" without warranty. To the maximum extent permitted by law, Gupto shall not be liable for any direct, indirect, or consequential damages arising from your use of the Service.</p>
+          </Section>
+          <Section title="9. Termination">
+            <p>We may suspend or terminate your access at any time, with or without cause. Your tokens and account data are forfeited upon termination for policy violations.</p>
+          </Section>
+          <Section title="10. Governing Law">
+            <p>These Terms are governed by applicable laws. Disputes shall be subject to the exclusive jurisdiction of the relevant courts.</p>
+          </Section>
+          <Section title="11. Contact">
+            <p>Questions? Reach us at <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">facebook.com/guptochat</a></p>
+          </Section>
+        </>
+      ) : (
+        <>
+          <Section title="1. Our Privacy Commitment">
+            <p>Privacy is a core design principle at Gupto. We built the platform to minimise data collection and maximise anonymity. This policy explains exactly what we do and do not collect.</p>
+          </Section>
+          <Section title="2. What We Collect">
+            <p><strong className="text-white">From Google Sign-In:</strong> email address, display name, profile photo, unique Firebase UID.</p>
+            <p><strong className="text-white">Usage data:</strong> token balance, referral count, seen announcement IDs, chosen display name, block status.</p>
+            <p><strong className="text-white">Moderation data:</strong> reports filed by/against you, block status and expiry.</p>
+          </Section>
+          <Section title="3. What We Do NOT Collect">
+            <p>We <strong className="text-red-400">never</strong> store: video or audio recordings, chat message content, IP addresses for tracking, device fingerprints, or advertising identifiers.</p>
+          </Section>
+          <Section title="4. Video & Audio">
+            <p>All video/audio uses <strong className="text-white">WebRTC peer-to-peer</strong> — your stream goes directly to your chat partner's device. It does not pass through or get stored on our servers.</p>
+          </Section>
+          <Section title="5. Text Chat">
+            <p>Messages are relayed in real-time via Socket.IO and are <strong className="text-white">never stored</strong>. Once a session ends, all messages are permanently gone.</p>
+          </Section>
+          <Section title="6. How We Use Your Data">
+            <p>Your data is used solely for: authentication, enforcing community guidelines, operating the token system, delivering announcements, and preventing abuse. We do not sell or share your data.</p>
+          </Section>
+          <Section title="7. Data Storage & Security">
+            <p>Account data is stored in <strong className="text-white">Google Firebase Firestore</strong> with industry-standard encryption at rest and in transit. Strict security rules ensure users can only access their own data.</p>
+          </Section>
+          <Section title="8. Google Sign-In">
+            <p>We receive only your basic profile (email, name, photo). We do not access your Gmail, Drive, or other Google services. You can revoke access anytime from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Google Account settings</a>.</p>
+          </Section>
+          <Section title="9. Children's Privacy">
+            <p>Gupto is strictly 18+. We do not knowingly collect data from anyone under 18. Accounts found to belong to minors are immediately deleted.</p>
+          </Section>
+          <Section title="10. Your Rights">
+            <p>You have the right to access, delete, correct, or export your data. Contact us via Facebook to exercise these rights.</p>
+          </Section>
+          <Section title="11. Contact">
+            <p>Privacy questions? <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">facebook.com/guptochat</a></p>
+          </Section>
+        </>
+      )}
+    </div>
+  );
+};
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shield, FileText, ChevronDown, ChevronUp } from 'lucide-react';

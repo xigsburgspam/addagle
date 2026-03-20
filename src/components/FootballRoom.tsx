@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Send, ArrowLeft, Users, ExternalLink, Tv2 } from 'lucide-react';
+import { Send, ArrowLeft, Users, ExternalLink, Tv2, Maximize2, Minimize2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 import { getDistrict } from '../utils/location';
@@ -14,6 +14,7 @@ interface Match {
   teamB: string;
   league: string;
   streamUrl: string;
+  streamMode?: 'popup' | 'iframe';
 }
 
 interface ChatEntry {
@@ -37,6 +38,9 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
   const [inputText,   setInputText]   = useState('');
   const [inputError,  setInputError]  = useState('');
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const streamAreaRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const scrollRef    = useRef<HTMLDivElement>(null);
   const inputRef     = useRef<HTMLInputElement>(null);
@@ -111,6 +115,26 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
     socket.emit('football-typing-stop', { matchId: match.id });
   }, [inputText, socket, match.id, userName]);
 
+  const toggleFullscreen = async () => {
+    const el = streamAreaRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch {}
+  };
+
+  React.useEffect(() => {
+    const onFSChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFSChange);
+    return () => document.removeEventListener('fullscreenchange', onFSChange);
+  }, []);
+
   const openStream = () => {
     window.open(match.streamUrl, '_blank', 'noopener,noreferrer');
   };
@@ -152,38 +176,52 @@ export const FootballRoom: React.FC<Props> = ({ match, userName, onLeave }) => {
         </div>
       </div>
 
-      {/* Stream area — pop-out button only */}
-      <div className="shrink-0 w-full flex flex-col items-center justify-center gap-5 py-10 px-6"
-           style={{ background: 'linear-gradient(180deg,#13151a 0%,#0d0e11 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-
-        {/* Match badge */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">Live · {match.league}</span>
-          </div>
-          <p className="text-2xl sm:text-3xl font-black text-white text-center">
-            {match.teamA} <span className="text-neutral-600 font-normal mx-1">vs</span> {match.teamB}
-          </p>
+      {/* Stream area */}
+      {match.streamMode === 'iframe' ? (
+        <div ref={streamAreaRef} className="shrink-0 w-full relative bg-black" style={{ height: '45vh' }}>
+          <iframe
+            ref={iframeRef}
+            src={match.streamUrl}
+            className="w-full h-full border-0"
+            allow="autoplay; fullscreen; encrypted-media"
+            allowFullScreen
+            title="Match Stream"
+          />
+          {/* Fullscreen button overlay */}
+          <button
+            onClick={toggleFullscreen}
+            className="absolute bottom-3 right-3 z-10 w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4 text-white" /> : <Maximize2 className="w-4 h-4 text-white" />}
+          </button>
         </div>
-
-        {/* Watch button */}
-        <motion.button
-          onClick={openStream}
-          whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.97 }}
-          className="flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl transition-all"
-          style={{ background: 'linear-gradient(135deg,#10b981,#059669)', color: '#000', boxShadow: '0 0 40px rgba(16,185,129,0.3)' }}
-        >
-          <Tv2 className="w-5 h-5" />
-          Watch Stream
-          <ExternalLink className="w-4 h-4 opacity-70" />
-        </motion.button>
-
-        <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">
-          Opens in a new tab
-        </p>
-      </div>
+      ) : (
+        <div className="shrink-0 w-full flex flex-col items-center justify-center gap-5 py-10 px-6"
+             style={{ background: 'linear-gradient(180deg,#13151a 0%,#0d0e11 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/25">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-[9px] font-black text-red-400 uppercase tracking-widest">Live · {match.league}</span>
+            </div>
+            <p className="text-2xl sm:text-3xl font-black text-white text-center">
+              {match.teamA} <span className="text-neutral-600 font-normal mx-1">vs</span> {match.teamB}
+            </p>
+          </div>
+          <motion.button
+            onClick={openStream}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl transition-all"
+            style={{ background: 'linear-gradient(135deg,#10b981,#059669)', color: '#000', boxShadow: '0 0 40px rgba(16,185,129,0.3)' }}
+          >
+            <Tv2 className="w-5 h-5" />
+            Watch Stream
+            <ExternalLink className="w-4 h-4 opacity-70" />
+          </motion.button>
+          <p className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">Opens in a new tab</p>
+        </div>
+      )}
 
       <div className="h-px bg-white/[0.07] shrink-0" />
 

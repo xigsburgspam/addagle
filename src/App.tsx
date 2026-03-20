@@ -9,7 +9,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { CookieConsent } from './components/CookieConsent';
 import { TermsPrivacy } from './components/TermsPrivacy';
 import { ShieldAlert } from 'lucide-react';
-import { auth } from './firebase';
+import { auth, db, doc, updateDoc } from './firebase';
 import { FootballLobby } from './components/FootballLobby';
 import { FootballRoom } from './components/FootballRoom';
 import { CustomChatLobby } from './components/CustomChatLobby';
@@ -27,6 +27,20 @@ const AppContent: React.FC = () => {
   const [customChatRoomData, setCustomChatRoomData] = useState<any>(null);
 
   const [userName, setUserName] = useState('');
+
+  // Periodic temp-block expiry check — every 60 seconds
+  React.useEffect(() => {
+    if (!user || !userData?.tempBlockedUntil) return;
+    const check = () => {
+      if (userData?.tempBlockedUntil && Date.now() > userData.tempBlockedUntil) {
+        updateDoc(doc(db, 'users', user.uid), { isBlocked: false, tempBlockedUntil: null })
+          .catch(() => {});
+      }
+    };
+    check(); // immediate check
+    const interval = setInterval(check, 60000);
+    return () => clearInterval(interval);
+  }, [user?.uid, userData?.tempBlockedUntil]);
 
   React.useEffect(() => {
     const handleSwitchToDistrict = (e: any) => {

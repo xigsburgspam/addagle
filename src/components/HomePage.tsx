@@ -7,6 +7,9 @@ import { Ghost, Shield, MessageSquare, Zap, ArrowRight, Globe, Lock, UserCheck, 
 import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 import { AccountSection } from './AccountSection';
+import { TermsPrivacyContent } from './TermsPrivacy';
+
+import { TermsPrivacyModal } from './TermsPrivacy';
 import { containsBanned } from '../constants';
 
 const BANGLADESH_DISTRICTS = [
@@ -112,6 +115,8 @@ export const HomePage: React.FC<{
   const [showAccount, setShowAccount] = useState(false);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showTopupPopup,   setShowTopupPopup]   = useState(false);
+  const [showTermsPopup,   setShowTermsPopup]   = useState(false);
+  const [showPrivacyPopup, setShowPrivacyPopup] = useState(false);
   const [topupPackages,    setTopupPackages]    = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -223,9 +228,8 @@ export const HomePage: React.FC<{
   };
 
   const copyInviteLink = () => {
-    const code = userData?.inviteCode || user?.uid?.slice(0, 8).toUpperCase();
-    // Use full UID as the ref code — direct Firestore lookup, no query needed
-    const link = `${window.location.origin}?ref=${user?.uid || code}`;
+    // Always use full UID as ref code — direct Firestore lookup
+    const link = `${window.location.origin}?ref=${user?.uid}`;
     navigator.clipboard.writeText(link).then(() => {
       setCopiedInvite(true);
       setTimeout(() => setCopiedInvite(false), 2000);
@@ -272,6 +276,17 @@ export const HomePage: React.FC<{
     }
   };
 
+  // Ghost SVG logo component
+  const GhostIcon = ({ className = '' }: { className?: string }) => (
+    <svg className={className} viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="currentColor" style={{ color: '#10b981' }}>
+      <path d="M500.308 897.51s59.08-127.536-26.855-182.986-260.878-132.647-273.916-329.929c-8.988-135.98 28.062-371.556 288.564-372.952C814.477 9.894 768.811 258.145 814.198 412.29c54.011 183.437-82.444 218.355-137.327 262.882-69.317 56.239-7.343 129.533-77.164 151.713s-99.398 70.625-99.398 70.625z" fill="#10b981"/>
+      <path d="M321.129 320.738a103.322 57.547 90 1 0 115.093 0 103.322 57.547 90 1 0-115.093 0Z" fill="#0a0a0a"/>
+      <path d="M551.315 320.738a103.322 57.547 90 1 0 115.093 0 103.322 57.547 90 1 0-115.093 0Z" fill="#0a0a0a"/>
+      <path d="M710.876 731.411s-3.924 71.932-36.62 102.014c-32.697 30.081-81.088 37.929-105.938 71.933-24.849 34.004-26.157 79.78-26.157 79.78s34.877-50.571 81.96-70.189c47.083-19.618 93.295-47.52 105.066-81.524 11.77-34.005-18.311-102.014-18.311-102.014z" fill="#059669"/>
+      <circle cx="340" cy="128" r="19" fill="white" opacity="0.9"/>
+    </svg>
+  );
+
   if (loading) return null;
 
   return (
@@ -283,10 +298,8 @@ export const HomePage: React.FC<{
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 p-6 flex justify-between items-center bg-gradient-to-b from-neutral-950 to-transparent">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
-            <Ghost className="w-6 h-6 text-white" />
-          </div>
-          <span className="text-2xl font-black tracking-widest uppercase font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.appName}</span>
+          <GhostIcon className="w-9 h-9 drop-shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
+          <span className="text-xl font-black tracking-widest uppercase bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">{t.appName}</span>
         </div>
 
         <div className="flex items-center gap-4">
@@ -297,54 +310,58 @@ export const HomePage: React.FC<{
             <span className="text-[10px] font-black uppercase tracking-widest">{t.adminInfo}</span>
           </button>
 
-          <div className="flex items-center gap-2 bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 p-1 rounded-xl">
-            <button
-              onClick={() => setLanguage('en')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${language === 'en' ? 'bg-emerald-500 text-black' : 'text-neutral-500 hover:text-white'}`}
-            >
-              EN
-            </button>
-            <button
-              onClick={() => setLanguage('bn')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${language === 'bn' ? 'bg-emerald-500 text-black' : 'text-neutral-500 hover:text-white'}`}
-            >
-              BN
-            </button>
-          </div>
+
         </div>
       </header>
 
       {/* Hero Section */}
-      <main className="relative z-10 max-w-5xl mx-auto px-6 pt-32 pb-40">
+      <main className="relative z-10 max-w-6xl mx-auto px-6 pt-28 pb-24">
         <div className="flex flex-col items-center text-center">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col items-center w-full"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">
-              <Zap className="w-3 h-3" />
-              Next-Gen Video Protocol
+            {/* Ghost mascot */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.7, delay: 0.1, ease: [0.34, 1.56, 0.64, 1] }}
+              className="mb-6 relative"
+            >
+              <div className="w-20 h-20 relative">
+                <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-xl animate-pulse" />
+                <GhostIcon className="w-20 h-20 relative z-10 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+              </div>
+            </motion.div>
+
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-5"
+                 style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.25em]">Anonymous · Encrypted · Live</span>
             </div>
 
-            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-[100px] font-black tracking-tighter leading-[0.85] mb-10 uppercase bg-gradient-to-br from-white via-white to-neutral-600 bg-clip-text text-transparent">
-              {t.tagline.split(' ').map((word, i) => (
-                <React.Fragment key={i}>
-                  {word === 'Strangers' || word === 'অপরিচিতদের'
-                    ? <span className="text-emerald-500 bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">{word}</span>
-                    : word}
-                  {i === 1 && <br />}
-                  {' '}
-                </React.Fragment>
-              ))}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.05] mb-5 max-w-3xl">
+              <span className="bg-gradient-to-br from-white via-neutral-100 to-neutral-500 bg-clip-text text-transparent">
+                Meet{' '}
+              </span>
+              <span className="relative inline-block">
+                <span className="bg-gradient-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
+                  Strangers
+                </span>
+                <span className="absolute -bottom-1 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 to-transparent rounded-full" />
+              </span>
+              <span className="bg-gradient-to-br from-white via-neutral-100 to-neutral-500 bg-clip-text text-transparent">
+                {', '}Stay Anonymous
+              </span>
             </h1>
 
-            <p className="text-xl text-neutral-400 max-w-2xl mx-auto mb-12 leading-relaxed font-medium">
-              {t.description}
+            <p className="text-base sm:text-lg text-neutral-400 max-w-xl mx-auto mb-10 leading-relaxed">
+              Bangladesh's premium random chat — video, text & live football rooms. No account data collected beyond what's necessary. Always encrypted.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center w-full">
+            <div className="flex flex-col sm:flex-row gap-3 justify-center w-full max-w-2xl mx-auto flex-wrap">
               {user ? (
                 userData?.isBlocked ? (
                   <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-3xl text-center font-bold w-full">
@@ -359,12 +376,12 @@ export const HomePage: React.FC<{
                       onClick={() => handleAction('video')}
                       disabled={noTokens}
                       title={noTokens ? `Not enough tokens (need 7, have ${userTokens})` : ''}
-                      className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-500 shadow-2xl shadow-emerald-500/20 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:from-neutral-700 disabled:to-neutral-800 disabled:text-neutral-400 disabled:shadow-none"
+                      className="group relative bg-gradient-to-r from-emerald-500 to-emerald-600 text-black px-7 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 hover:from-emerald-400 hover:to-emerald-500 transition-all duration-300 shadow-xl shadow-emerald-500/25 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed disabled:from-neutral-700 disabled:to-neutral-800 disabled:text-neutral-400 disabled:shadow-none"
                     >
                       <div className="flex flex-col items-center">
                         <div className="flex items-center gap-3">
                           {noTokens ? `Not Enough Tokens (${userTokens}/7)` : t.startEncounter}
-                          {!noTokens && <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-2 transition-transform duration-500" />}
+                          {!noTokens && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />}
                         </div>
                       </div>
                     </button>
@@ -373,26 +390,28 @@ export const HomePage: React.FC<{
 
                     <button
                       onClick={() => handleAction('text')}
-                      className="group relative bg-neutral-900 border border-neutral-800 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:border-emerald-500/50 hover:bg-gradient-to-r hover:from-neutral-900 hover:to-neutral-800 transition-all duration-500 w-full sm:w-auto"
+                      className="group relative bg-neutral-900/80 border border-neutral-800 text-white px-7 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 hover:border-emerald-500/40 transition-all duration-300 w-full sm:w-auto"
                     >
                       {t.startTextChat}
-                      <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
+                      <MessageSquare className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" />
                     </button>
 
                     <button
                       onClick={() => handleAction('football')}
-                      className="group relative overflow-hidden bg-gradient-to-r from-green-600 to-emerald-700 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:from-green-500 hover:to-emerald-600 transition-all duration-500 shadow-2xl shadow-green-900/40 w-full sm:w-auto"
+                      className="group relative overflow-hidden text-white px-7 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 transition-all duration-300 w-full sm:w-auto"
+                      style={{ background: 'linear-gradient(135deg, #166534 0%, #15803d 40%, #ca8a04 100%)', boxShadow: '0 4px 20px rgba(21,128,61,0.35)' }}
                     >
-                      <span className="absolute top-1 right-2 text-[8px] font-black text-green-300/70 uppercase tracking-widest animate-pulse">● LIVE</span>
-                      <Tv2 className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
+                      <span className="absolute top-1 right-2 text-[8px] font-black text-yellow-300/80 uppercase tracking-widest animate-pulse">● LIVE</span>
+                      <Tv2 className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" />
                       Watch Football
                     </button>
 
                     <button
                       onClick={() => handleAction('custom')}
-                      className="group relative bg-indigo-600 border border-indigo-500 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-3 hover:bg-indigo-500 transition-all duration-500 shadow-2xl shadow-indigo-500/20 w-full sm:w-auto"
+                      className="group relative text-white px-7 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 transition-all duration-300 w-full sm:w-auto"
+                      style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #a855f7 100%)', boxShadow: '0 4px 20px rgba(124,58,237,0.35)' }}
                     >
-                      <Users className="w-5 h-5 sm:w-6 sm:h-6 group-hover:scale-110 transition-transform duration-500" />
+                      <Users className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" />
                       Custom Chat Room
                     </button>
                   </>
@@ -400,9 +419,9 @@ export const HomePage: React.FC<{
               ) : (
                 <button
                   onClick={handleLogin}
-                  className="group bg-neutral-900 border border-neutral-800 text-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl flex items-center justify-center gap-4 hover:bg-neutral-800 transition-all duration-500 w-full sm:w-auto"
+                  className="group bg-neutral-900 border border-neutral-800 text-white px-7 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-3 hover:bg-neutral-800 transition-all duration-300 w-full sm:w-auto"
                 >
-                  <svg className="w-6 h-6 sm:w-8 sm:h-8 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                     <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                     <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
@@ -454,7 +473,7 @@ export const HomePage: React.FC<{
             )}
 
             {/* Stats Bar */}
-            <div className="mt-12 flex flex-wrap justify-center gap-3 w-full">
+            <div className="mt-8 flex flex-wrap justify-center gap-2 w-full">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900/50 border border-white/5 backdrop-blur-sm">
                 <Users className="w-3 h-3 text-emerald-500" />
                 <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Online:</span>
@@ -492,7 +511,7 @@ export const HomePage: React.FC<{
       </main>
 
       {/* Features Bento Grid */}
-      <section className="relative z-10 border-t border-neutral-900 bg-neutral-950 py-32">
+      <section className="relative z-10 border-t border-neutral-900 bg-neutral-950 py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="mb-20">
             <h2 className="text-4xl font-black tracking-tighter uppercase mb-4">{t.protocol}</h2>
@@ -500,7 +519,7 @@ export const HomePage: React.FC<{
           </div>
 
           <div className="grid md:grid-cols-12 gap-6">
-            <div className="md:col-span-8 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
+            <div className="md:col-span-8 p-14 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Shield className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
               <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.activeModeration}</h3>
               <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">{t.activeModerationDesc}</p>
@@ -521,7 +540,7 @@ export const HomePage: React.FC<{
               <p className="text-neutral-400 leading-relaxed">{t.zeroHistoryDesc}</p>
             </div>
 
-            <div className="md:col-span-8 p-12 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
+            <div className="md:col-span-8 p-14 rounded-[40px] bg-gradient-to-br from-neutral-900/50 to-neutral-900/20 border border-neutral-800 hover:border-emerald-500/30 transition-all duration-500 group">
               <Ghost className="w-12 h-12 text-emerald-500 mb-8 group-hover:scale-110 transition-transform" />
               <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">{t.visualVerification}</h3>
               <p className="text-neutral-400 text-lg leading-relaxed max-w-xl">{t.visualVerificationDesc}</p>
@@ -534,15 +553,15 @@ export const HomePage: React.FC<{
       <footer className="relative z-10 py-8 border-t border-neutral-900 bg-neutral-950">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
-              <Ghost className="w-6 h-6 text-white" />
+            <div className="w-9 h-9 flex items-center justify-center">
+              <GhostIcon className="w-9 h-9" />
             </div>
-            <span className="text-2xl font-black tracking-widest uppercase font-brand bg-gradient-to-r from-emerald-500 to-emerald-400 bg-clip-text text-transparent">{t.appName}</span>
+            <span className="text-xl font-black tracking-widest uppercase bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">{t.appName}</span>
           </div>
           <p className="text-neutral-600 text-xs font-bold uppercase tracking-[0.3em]">{t.copyright}</p>
           <div className="flex gap-8 items-center">
-            <Link to="/terms" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">{t.terms}</Link>
-            <Link to="/privacy" className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">{t.privacy}</Link>
+            <button onClick={() => setShowTermsPopup(true)} className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Terms</button>
+            <button onClick={() => setShowPrivacyPopup(true)} className="text-neutral-600 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">Privacy</button>
             <a href="https://www.facebook.com/guptochat/" target="_blank" rel="noopener noreferrer" className="text-neutral-600 hover:text-blue-400 transition-colors flex items-center gap-1.5">
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
@@ -552,6 +571,36 @@ export const HomePage: React.FC<{
           </div>
         </div>
       </footer>
+
+      {/* Terms Popup */}
+      {showTermsPopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }} onClick={() => setShowTermsPopup(false)}>
+          <div className="w-full max-w-2xl max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col" style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ background: 'linear-gradient(135deg,#052e16,#0f172a)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span className="text-white font-black text-sm uppercase tracking-widest">Terms of Service</span>
+              <button onClick={() => setShowTermsPopup(false)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}><X className="w-4 h-4 text-white" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              <TermsPrivacyContent type="terms" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Privacy Popup */}
+      {showPrivacyPopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }} onClick={() => setShowPrivacyPopup(false)}>
+          <div className="w-full max-w-2xl max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col" style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.08)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ background: 'linear-gradient(135deg,#052e16,#0f172a)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span className="text-white font-black text-sm uppercase tracking-widest">Privacy Policy</span>
+              <button onClick={() => setShowPrivacyPopup(false)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}><X className="w-4 h-4 text-white" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              <TermsPrivacyContent type="privacy" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Admin Popup */}
       <AnimatePresence>
