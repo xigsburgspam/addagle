@@ -339,6 +339,7 @@ export const Chat: React.FC<ChatProps> = ({
   const chatCharsLeft = effectiveLimit - totalCharsUsed;
 
   return (
+    <>
     <div className="flex flex-col h-full w-full overflow-hidden select-none"
          style={{ background: '#111214' }}>
 
@@ -788,6 +789,6 @@ export const Chat: React.FC<ChatProps> = ({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 };
