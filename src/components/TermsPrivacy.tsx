@@ -52,16 +52,16 @@ export const TermsPrivacyContent: React.FC<{ type: 'terms' | 'privacy' }> = ({ t
             <p>We <strong className="text-red-400">never</strong> store: video or audio recordings, chat message content, IP addresses for tracking, device fingerprints, or advertising identifiers.</p>
           </Section>
           <Section title="4. Video & Audio">
-            <p>All video/audio uses <strong className="text-white">WebRTC peer-to-peer</strong> — your stream goes directly to your chat partner's device. It does not pass through or get stored on our servers.</p>
+            <p>All video and audio streams go directly between you and your chat partner's device — they do not pass through or get stored on our servers.</p>
           </Section>
           <Section title="5. Text Chat">
-            <p>Messages are relayed in real-time via Socket.IO and are <strong className="text-white">never stored</strong>. Once a session ends, all messages are permanently gone.</p>
+            <p>Messages are relayed in real-time and are <strong className="text-white">never stored</strong>. Once a session ends, all messages are permanently gone.</p>
           </Section>
           <Section title="6. How We Use Your Data">
             <p>Your data is used solely for: authentication, enforcing community guidelines, operating the token system, delivering announcements, and preventing abuse. We do not sell or share your data.</p>
           </Section>
           <Section title="7. Data Storage & Security">
-            <p>Account data is stored in <strong className="text-white">Google Firebase Firestore</strong> with industry-standard encryption at rest and in transit. Strict security rules ensure users can only access their own data.</p>
+            <p>Account data is stored in a secure cloud database with industry-standard encryption at rest and in transit. Strict security rules ensure users can only access their own data.</p>
           </Section>
           <Section title="8. Google Sign-In">
             <p>We receive only your basic profile (email, name, photo). We do not access your Gmail, Drive, or other Google services. You can revoke access anytime from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Google Account settings</a>.</p>
@@ -274,12 +274,12 @@ export const TermsPrivacy: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) 
                 </ul>
               </Section>
 
-              <Section title="4. Video & Audio (WebRTC)">
-                <p>All video and audio connections use <strong className="text-white">WebRTC peer-to-peer technology</strong>. Your video and audio stream goes directly to your chat partner's device — it does not pass through or get stored on our servers. STUN/TURN relay servers are used only to establish the connection and do not record content.</p>
+              <Section title="4. Video & Audio">
+                <p>All video and audio streams are transmitted directly between your device and your chat partner's device — they do not pass through or get stored on our servers. Connection relay infrastructure is used only to establish the link and does not record any content.</p>
               </Section>
 
               <Section title="5. Text Chat">
-                <p>Text messages are relayed in real-time via our server using Socket.IO. Messages are <strong className="text-white">not stored in any database</strong>. Once a chat session ends, all messages are permanently lost. We do not have access to your conversation history.</p>
+                <p>Text messages are relayed in real-time via our servers and are <strong className="text-white">not stored anywhere</strong>. Once a chat session ends, all messages are permanently lost. We do not have access to your conversation history.</p>
               </Section>
 
               <Section title="6. How We Use Your Data">
@@ -295,12 +295,12 @@ export const TermsPrivacy: React.FC<{ type: 'terms' | 'privacy' }> = ({ type }) 
               </Section>
 
               <Section title="7. Data Storage & Security">
-                <p>Your account data is stored in <strong className="text-white">Google Firebase Firestore</strong>, a cloud database with industry-standard security. Firebase is governed by Google's infrastructure security policies. Data is encrypted at rest and in transit.</p>
-                <p>Access to Firestore is governed by strict security rules — users can only read and write their own data. Admin access is limited to a single verified admin account.</p>
+                <p>Your account data is stored in a secure cloud database with industry-standard encryption at rest and in transit.</p>
+                <p>Access is governed by strict security rules — users can only read and write their own data. Admin access is limited to a single verified admin account.</p>
               </Section>
 
               <Section title="8. Authentication (Google Sign-In)">
-                <p>We use Google OAuth 2.0 for authentication. We receive only the basic profile information you grant (email, name, photo). We do not receive your Google password or access to your Gmail, Drive, or other Google services. You can revoke access at any time from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Google Account settings</a>.</p>
+                <p>We use Google Sign-In for authentication. We receive only the basic profile information you grant (email, name, photo). We do not receive your password or access to your other Google services. You can revoke access at any time from your Google Account settings.</p>
               </Section>
 
               <Section title="9. Cookies & Local Storage">

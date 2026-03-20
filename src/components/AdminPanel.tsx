@@ -69,8 +69,10 @@ export const AdminPanel: React.FC = () => {
   const [giftingId,     setGiftingId]     = useState<string | null>(null);
   const [packages,      setPackages]      = useState<any[]>([]);
   const [blockStats,    setBlockStats]    = useState({ totalBlocked: 0, totalTempBlocked: 0 });
-  const [tempBlockHours,  setTempBlockHours]  = useState(6);
-  const [tempBlockMins,   setTempBlockMins]   = useState(0);
+  const [tempBlockDurations, setTempBlockDurations] = useState<Record<string, {h: number, m: number}>>({});
+  const getTBD = (uid: string) => tempBlockDurations[uid] ?? { h: 6, m: 0 };
+  const setTBH = (uid: string, h: number) => setTempBlockDurations(p => ({ ...p, [uid]: { ...getTBD(uid), h } }));
+  const setTBM = (uid: string, m: number) => setTempBlockDurations(p => ({ ...p, [uid]: { ...getTBD(uid), m } }));
   const [newPkg,        setNewPkg]        = useState({ label: '', tokens: '', price: '', waLink: '', bestValue: false });
   const [pkgLoading,    setPkgLoading]    = useState(false);
   const [giveAllAmount, setGiveAllAmount] = useState<number>(100);
@@ -769,23 +771,24 @@ export const AdminPanel: React.FC = () => {
                                 <div className="flex items-center gap-1">
                                   <input
                                     type="number" min={0} max={99}
-                                    value={tempBlockHours}
-                                    onChange={e => setTempBlockHours(Math.max(0, parseInt(e.target.value) || 0))}
+                                    value={getTBD(user.id).h}
+                                    onChange={e => setTBH(user.id, Math.max(0, parseInt(e.target.value) || 0))}
                                     className="w-10 text-center bg-neutral-950 border border-neutral-700 rounded-lg text-xs text-white font-black outline-none focus:border-amber-500 py-1"
                                     title="Hours"
                                   />
                                   <span className="text-neutral-600 text-[10px] font-bold">h</span>
                                   <input
                                     type="number" min={0} max={59}
-                                    value={tempBlockMins}
-                                    onChange={e => setTempBlockMins(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+                                    value={getTBD(user.id).m}
+                                    onChange={e => setTBM(user.id, Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
                                     className="w-10 text-center bg-neutral-950 border border-neutral-700 rounded-lg text-xs text-white font-black outline-none focus:border-amber-500 py-1"
                                     title="Minutes"
                                   />
                                   <span className="text-neutral-600 text-[10px] font-bold">m</span>
                                   <button
                                     onClick={() => {
-                                      const ms = (tempBlockHours * 60 + tempBlockMins) * 60 * 1000;
+                                      const { h, m } = getTBD(user.id);
+                                      const ms = (h * 60 + m) * 60 * 1000;
                                       if (ms <= 0) return alert('Set a duration greater than 0');
                                       tempBlockUser(user.id, ms);
                                     }}
