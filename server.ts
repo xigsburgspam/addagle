@@ -59,6 +59,7 @@ async function startServer() {
     cors: {
       origin: '*',
     },
+    maxHttpBufferSize: 5e6, // 5MB — needed for image relay
   });
   const PORT = 3000;
 
@@ -469,6 +470,11 @@ async function startServer() {
     // Chat
     socket.on('send-chat-message', ({ roomId, message }) => {
       socket.to(roomId).emit('chat-message', message);
+    });
+
+    // Image relay — base64 data passed through, never stored
+    socket.on('send-chat-image', ({ roomId, imageId, base64, mimeType }) => {
+      socket.to(roomId).emit('chat-image', { imageId, base64, mimeType });
     });
 
     socket.on('typing-start', ({ roomId }) => {

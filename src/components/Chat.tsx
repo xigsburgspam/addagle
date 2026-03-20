@@ -2,7 +2,7 @@ import React, {
   useState, useEffect, useRef, useCallback, useLayoutEffect
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Reply, X, CheckCheck, Clock, Smile, ChevronDown } from 'lucide-react';
+import { Send, Image as ImageIcon, Reply, X, CheckCheck, Clock, Smile, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { BANNED_WORDS, containsBanned } from '../constants';
@@ -23,6 +23,8 @@ interface Message {
   status: Status;
   replyTo?: { id: string; text: string; sender: string } | null;
   reaction?: string | null;
+  imageUrl?: string | null;  // base64 data URI for images
+  isImage?: boolean;
 }
 
 interface Swipe {
@@ -45,6 +47,9 @@ export const Chat: React.FC<ChatProps> = ({
 }) => {
   const [messages,      setMessages]      = useState<Message[]>([]);
   const [inputText,     setInputText]     = useState('');
+  const [lightboxSrc,   setLightboxSrc]   = useState<string | null>(null);
+  const fileInputRef    = useRef<HTMLInputElement>(null);
+  const MAX_IMAGE_BYTES = 3 * 1024 * 1024; // 3MB before compression
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [replyingTo,    setReplyingTo]    = useState<Message | null>(null);
   const [menuId,        setMenuId]        = useState<string | null>(null);
@@ -127,6 +132,21 @@ export const Chat: React.FC<ChatProps> = ({
       });
       if (onNewMessage) onNewMessage();
     };
+    const onImage = ({ imageId, base64, mimeType }: { imageId: string; base64: string; mimeType: string }) => {
+      const imgMsg: Message = {
+        id: imageId,
+        sender: 'partner',
+        text: '',
+        timestamp: Date.now(),
+        status: 'delivered',
+        isImage: true,
+        imageUrl: `data:${mimeType};base64,${base64}`,
+      };
+      setMessages(p => [...p, imgMsg]);
+      if (onNewMessage) onNewMessage();
+    };
+    socket.on('chat-image', onImage);
+
     const onDelivered = ({ messageId }: { messageId: string }) =>
       setMessages(p => p.map(m =>
         m.id === messageId && m.status === 'sending' ? { ...m, status: 'delivered' } : m));
@@ -149,8 +169,43 @@ export const Chat: React.FC<ChatProps> = ({
       socket.off('chat-message');      socket.off('typing-start');
       socket.off('typing-stop');       socket.off('message-delivered');
       socket.off('message-seen');      socket.off('message-reaction');
+      socket.off('chat-image');
     };
   }, [socket, roomId]);
+
+  const sendImage = useCallback((file: File) => {
+    if (!socket) return;
+    // Compress using canvas before sending
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 1200;
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+          else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+        }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        const quality = file.size > MAX_IMAGE_BYTES ? 0.6 : 0.85;
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const base64 = dataUrl.split(',')[1];
+        const imageId = Math.random().toString(36).slice(2);
+        // Add to own chat immediately
+        setMessages(p => [...p, {
+          id: imageId, sender: currentUserId, text: '',
+          timestamp: Date.now(), status: 'sending' as Status,
+          isImage: true, imageUrl: dataUrl,
+        }]);
+        // Relay to partner — never saved
+        socket.emit('send-chat-image', { roomId, imageId, base64, mimeType: 'image/jpeg' });
+      };
+      img.src = ev.target!.result as string;
+    };
+    reader.readAsDataURL(file);
+  }, [socket, roomId, currentUserId]);
 
   const send = useCallback(() => {
     const t = inputText.trim();
@@ -434,9 +489,20 @@ export const Chat: React.FC<ChatProps> = ({
                       </div>
                     )}
 
-                    <p className="px-3 pt-1.5 text-[13.5px] leading-[1.5] break-words break-all relative z-10" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                      {msg.text}
-                    </p>
+                    {msg.isImage && msg.imageUrl ? (
+                      <div className="p-1.5 pt-1.5">
+                        <img
+                          src={msg.imageUrl}
+                          alt="shared image"
+                          className="rounded-xl max-w-[220px] max-h-[280px] object-cover cursor-pointer block"
+                          onClick={e => { e.stopPropagation(); setLightboxSrc(msg.imageUrl!); }}
+                        />
+                      </div>
+                    ) : (
+                      <p className="px-3 pt-1.5 text-[13.5px] leading-[1.5] break-words break-all relative z-10" style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                        {msg.text}
+                      </p>
+                    )}
 
                     <div className={`flex items-center gap-1 px-2.5 pb-1.5 mt-0.5
                                      ${mine ? 'justify-end' : 'justify-start'}`}>
@@ -632,6 +698,31 @@ export const Chat: React.FC<ChatProps> = ({
         </AnimatePresence>
 
         <div className="flex items-end gap-2 px-3 py-2.5">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) sendImage(file);
+              e.target.value = '';
+            }}
+          />
+
+          {/* Image attach button */}
+          <button
+            type="button"
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
+            style={{ background: '#23262e', border: '1px solid rgba(255,255,255,0.07)' }}
+            title="Send image"
+          >
+            <ImageIcon className="w-4 h-4 text-neutral-400" />
+          </button>
+
           <div className="flex-1 flex items-end gap-2 px-3 py-2 rounded-[22px] transition-all duration-200"
                style={{ background: '#23262e', border: '1px solid rgba(255,255,255,0.07)' }}>
             <textarea
@@ -673,6 +764,30 @@ export const Chat: React.FC<ChatProps> = ({
           </motion.button>
         </div>
       </div>
+    </div>
+
+      {/* Lightbox — tap image to view full size */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[500] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)' }}
+          onClick={() => setLightboxSrc(null)}
+        >
+          <img
+            src={lightboxSrc}
+            alt="full size"
+            className="max-w-full max-h-full rounded-2xl object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.1)' }}
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
