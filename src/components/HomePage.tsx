@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { useFirebase } from '../FirebaseContext';
 import { useLanguage } from '../LanguageContext';
 import { auth, googleProvider, signInWithPopup, db, doc, onSnapshot, collection, query, orderBy, updateDoc } from '../firebase';
@@ -8,8 +7,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AdminPopup } from './AdminPopup';
 import { AccountSection } from './AccountSection';
 import { TermsPrivacyContent } from './TermsPrivacy';
-
-import { TermsPrivacyModal } from './TermsPrivacy';
 import { containsBanned } from '../constants';
 
 const BANGLADESH_DISTRICTS = [
