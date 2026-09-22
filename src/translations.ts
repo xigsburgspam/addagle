@@ -133,7 +133,7 @@ export const translations = {
     backToHome: 'Back to Home',
     adminInfo: 'Admin Info',
     adminName: 'Talha Jubayer',
-    adminEducation: 'Currently studying Aeronautical Engineering (Avionics) at Aviation and Aerospace University, Bangladesh',
+    adminEducation: 'Currently studying Aerospace Engineering at Aviation and Aerospace University, Bangladesh',
     adminFacebook: 'Connect to Facebook',
     adminRole: 'Admin',
     close: 'Close',
